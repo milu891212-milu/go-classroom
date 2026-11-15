@@ -469,6 +469,18 @@
     return true;
   }
 
+  /* 一次走很多步：n < 0 往回、n > 0 往前，走到不能走為止。有動到就回傳 true。 */
+  function demoStep(game, n) {
+    if (game.status !== 'demo' || !n) return false;
+    var limit = Math.min(Math.abs(n), game.record.moves.length + game.demo.moves.length + game.demo.undone.length);
+    var moved = false;
+    for (var i = 0; i < limit; i++) {
+      if (!(n < 0 ? demoBack(game) : demoForward(game))) break;
+      moved = true;
+    }
+    return moved;
+  }
+
   /*
    * 在某一點加標記；那一點已經有標記就改成拿掉。
    * type：'tri' 三角形、'sq' 方塊、'cir' 圓圈、'x' 叉、'letter' 字母（自動用還沒用過的 A、B、C…）
@@ -602,6 +614,7 @@
     demoPlay: demoPlay,
     demoBack: demoBack,
     demoForward: demoForward,
+    demoStep: demoStep,
     demoMark: demoMark,
     demoClear: demoClear,
     endDemo: endDemo

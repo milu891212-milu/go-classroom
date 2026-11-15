@@ -536,10 +536,16 @@
         b.classList.toggle('on', b.getAttribute('data-tool') === state.tool);
       });
       var dm = g.demo, atEnd = dv.base >= dv.total;
-      $('btnTeachBack').disabled = !dm.moves.length && dv.base <= 0;
-      $('btnTeachFwd').disabled = !dm.undone.length && (dm.moves.length > 0 || atEnd);
+      var noBack = !dm.moves.length && dv.base <= 0;
+      var noFwd = !dm.undone.length && (dm.moves.length > 0 || atEnd);
+      Array.prototype.forEach.call($('teachNav').querySelectorAll('[data-step]'), function (b) {
+        var s = b.getAttribute('data-step');
+        b.disabled = (s === 'first' || parseInt(s, 10) < 0) ? noBack : noFwd;
+      });
       $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length && atEnd;
-      $('teachWhere').textContent = (atEnd ? '暫停時的局面' : '退回到第 ' + dv.pos.moveNo + ' 手') +
+      $('btnTeachClear').textContent = '全部清除，回到' + (dm.from === 'finished' ? '終局' : '暫停時') + '的局面';
+      $('teachWhere').textContent = (atEnd ? (dm.from === 'finished' ? '終局的局面' : '暫停時的局面')
+        : dv.base <= 0 ? '退回到起始局面' : '退回到第 ' + dv.pos.moveNo + ' 手') +
         (dm.moves.length ? '＋變化 ' + dm.moves.length + ' 手' : '');
       $('btnTeachEnd').textContent = g.demo.from === 'playing' ? '結束擺棋，回到對局' : '結束擺棋';
     }
@@ -974,19 +980,25 @@
     state.tool = btn.getAttribute('data-tool');
     render();
   });
-  function teachStep(forward) {
-    act(function (x) { return forward ? M.demoForward(x) : M.demoBack(x); });
+  /* n：負數往回、正數往前；一次走不完就走到底 */
+  function teachStep(n) {
+    act(function (x) { return M.demoStep(x, n); });
   }
-  $('btnTeachBack').addEventListener('click', function () { teachStep(false); });
-  $('btnTeachFwd').addEventListener('click', function () { teachStep(true); });
-  // 擺棋時也可以用鍵盤左右鍵
+  var FAR = 100000;   // 「退到開頭／進到最後」：步數給很大，走到不能走為止
+  $('teachNav').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-step]');
+    if (!btn || btn.disabled) return;
+    var s = btn.getAttribute('data-step');
+    teachStep(s === 'first' ? -FAR : s === 'last' ? FAR : parseInt(s, 10));
+  });
+  // 擺棋時也可以用鍵盤：← → 一手，PageUp／PageDown 十手，Home／End 到頭尾
   document.addEventListener('keydown', function (ev) {
     if (state.mode !== 'play' || !state.game || state.game.status !== 'demo' || !canTeach()) return;
     if (document.querySelector('dialog[open]')) return;
     var tag = ev.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-    if (ev.key === 'ArrowLeft') { teachStep(false); ev.preventDefault(); }
-    else if (ev.key === 'ArrowRight') { teachStep(true); ev.preventDefault(); }
+    var n = { ArrowLeft: -1, ArrowRight: 1, PageUp: -10, PageDown: 10, Home: -FAR, End: FAR }[ev.key];
+    if (n) { teachStep(n); ev.preventDefault(); }
   });
   $('btnTeachClear').addEventListener('click', function () {
     act(function (x) { return M.demoClear(x); });

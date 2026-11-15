@@ -551,6 +551,21 @@
     eq([g.record.moves.length, g.turn, g.status], [4, B, 'playing'], '對局本身完全沒變');
   });
 
+  test('擺棋講解：一次退／進很多手，走到底為止', function () {
+    var g = M.create(S.load('(;SZ[9];B[aa];W[ba];B[ca];W[da];B[ea];W[fa];B[ga];W[ha];B[ia];W[ab];B[bb];W[cb])'), 12, B, null, 0);
+    M.startDemo(g, 0);
+    M0.demoPlay(g, 0, 40); M0.demoPlay(g, 0, 41);
+    eq(M0.demoStep(g, -10), true);
+    eq([g.demo.base, g.demo.moves.length], [4, 0], '退 10 手：先收回 2 手變化，再退 8 手對局');
+    eq(M0.demoStep(g, 10), true); eq(g.demo.base, 12, '進 10 手：超過就停在最後');
+    eq(M0.demoStep(g, 10), false, '已經在最後');
+    eq(M0.demoStep(g, -100000), true); eq(g.demo.base, 0, '退到開頭');
+    eq(M0.demoStep(g, -1), false);
+    eq(M0.demoStep(g, 100000), true); eq(g.demo.base, 12, '進到最後');
+    M.endDemo(g, 0);
+    eq(M0.demoStep(g, -1), false, '不在擺棋時沒有作用');
+  });
+
   test('擺棋講解：變化裡可以提子', function () {
     var rec = recordFrom(['O X . . .', '. . . . .', '. . . . .', '. . . . .', '. . . . .'], 0);
     var g = M.create(rec, 0, B, null, 0);
