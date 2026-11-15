@@ -5,7 +5,7 @@
  *     record, startAt, turn,
  *     rule:   'territory'（比目法）或 'area'（數子法）,
  *     status: 'playing' | 'scoring' | 'finished' | 'demo'（老師擺棋講解，對局暫停）,
- *     demo:   null 或 { from:'playing'|'finished', moves:[{c,p}], marks:[{p,t}] },
+ *     demo:   null 或 { from:'playing'|'finished', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}] },
  *     clock:  null（不計時）或 { main, byo, periods, left:{b:{main,periods}, w:{...}}, since },
  *     request: null 或 { type:'undo'|'count'|'draw', from },
  *     dead:   [數目時被標為死子的位置],
@@ -386,16 +386,29 @@
     if (from === 'playing' && !stopClock(game, now)) return true;   // 剛好超時：對局已結束，照樣要存回去
     game.status = 'demo';
     game.request = null;
-    game.demo = { from: from, moves: [], marks: [] };
+    game.demo = {
+      from: from,
+      base: game.record.moves.length,   // 目前退到對局的第幾步（可以往回退，從之前的局面擺變化）
+      moves: [],                        // 擺的變化
+      undone: [],                       // 被「上一手」收回的變化，「下一手」可以再擺回來
+      marks: []
+    };
     return true;
   }
 
+  function demoBase(game) {
+    var total = game.record.moves.length, d = game.demo;
+    if (!d || typeof d.base !== 'number') return total;
+    return Math.max(0, Math.min(total, d.base));
+  }
+
   /*
-   * 擺棋時畫面上的局面：對局的局面再加上擺的變化。
-   * 回傳 { pos, board, numbers(變化的手數 1,2,3…), last }
+   * 擺棋時畫面上的局面：對局（退到 base 那一步）的局面再加上擺的變化。
+   * 回傳 { pos, board, numbers(變化的手數 1,2,3…), last, base, total }
    */
   function demoView(game) {
-    var pos = G.replay(game.record), numbers = new Uint16Array(pos.size * pos.size), last = -1;
+    var base = demoBase(game);
+    var pos = G.replay(game.record, base), numbers = new Uint16Array(pos.size * pos.size), last = pos.last;
     var moves = game.demo ? game.demo.moves : [];
     for (var i = 0; i < moves.length; i++) {
       var r = E.place(pos, moves[i].c, moves[i].p, false);
@@ -404,14 +417,15 @@
       if (pos.board[moves[i].p]) numbers[moves[i].p] = i + 1;
       last = moves[i].p;
     }
-    return { pos: pos, board: pos.board, numbers: numbers, last: last };
+    return { pos: pos, board: pos.board, numbers: numbers, last: last, base: base, total: game.record.moves.length };
   }
 
   /* 擺變化時「黑白輪流」的下一手是誰 */
   function demoNextColor(game) {
     var moves = game.demo ? game.demo.moves : [];
     if (moves.length) return E.other(moves[moves.length - 1].c);
-    return game.turn;
+    var base = demoBase(game);
+    return base >= game.record.moves.length ? game.turn : G.naturalTurn(game.record, base);
   }
 
   /* 擺一顆變化的棋。color = 0 表示黑白輪流。會提子；已有棋子或禁著點不能下，打劫不限制。 */
@@ -422,12 +436,36 @@
     pos.ko = -1;
     if (E.check(pos, c, idx)) return false;
     game.demo.moves.push({ c: c, p: idx });
+    game.demo.undone = [];
     return true;
   }
 
-  function demoUndo(game) {
-    if (game.status !== 'demo' || !game.demo.moves.length) return false;
-    game.demo.moves.pop();
+  /* 上一手：先收回擺的變化；變化都收完了，就往回退對局的著手 */
+  function demoBack(game) {
+    if (game.status !== 'demo') return false;
+    var d = game.demo;
+    if (d.moves.length) {
+      d.undone.push(d.moves.pop());
+      return true;
+    }
+    var base = demoBase(game);
+    if (base <= 0) return false;
+    d.base = base - 1;
+    d.undone = [];
+    return true;
+  }
+
+  /* 下一手：把收回的變化擺回來；沒有變化時，往前進對局的著手 */
+  function demoForward(game) {
+    if (game.status !== 'demo') return false;
+    var d = game.demo;
+    if (d.undone.length) {
+      d.moves.push(d.undone.pop());
+      return true;
+    }
+    var base = demoBase(game);
+    if (d.moves.length || base >= game.record.moves.length) return false;
+    d.base = base + 1;
     return true;
   }
 
@@ -459,9 +497,12 @@
     return true;
   }
 
+  /* 全部清除：變化與標記都拿掉，局面回到暫停當時 */
   function demoClear(game) {
     if (game.status !== 'demo') return false;
+    game.demo.base = game.record.moves.length;
     game.demo.moves = [];
+    game.demo.undone = [];
     game.demo.marks = [];
     return true;
   }
@@ -521,9 +562,12 @@
     g.rule = g.rule === 'territory' ? 'territory' : 'area';
     if (g.status === 'demo') {
       var d = g.demo || {};
+      var stone = function (m) { return { c: m.c, p: m.p }; };
       g.demo = {
         from: d.from === 'finished' ? 'finished' : 'playing',
-        moves: toArray(d.moves).map(function (m) { return { c: m.c, p: m.p }; }),
+        base: typeof d.base === 'number' ? Math.max(0, Math.min(r.moves.length, d.base)) : r.moves.length,
+        moves: toArray(d.moves).map(stone),
+        undone: toArray(d.undone).map(stone),
         marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; })
       };
     } else {
@@ -556,7 +600,8 @@
     demoView: demoView,
     demoNextColor: demoNextColor,
     demoPlay: demoPlay,
-    demoUndo: demoUndo,
+    demoBack: demoBack,
+    demoForward: demoForward,
     demoMark: demoMark,
     demoClear: demoClear,
     endDemo: endDemo

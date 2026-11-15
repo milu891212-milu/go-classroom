@@ -251,7 +251,7 @@
       n: g.record.moves.length,
       status: g.status,
       reply: g.reply ? g.reply.n : 0,
-      demo: g.demo ? g.demo.moves.length : 0
+      demo: g.demo ? g.demo.base + g.demo.moves.length : 0   // 擺棋時盤面走到第幾步
     };
   }
 
@@ -267,7 +267,7 @@
         closeGameDialogs();
         Sound.notice();
         toast(prev.status === 'playing' ? '對局暫停，開始擺棋講解' : '開始擺棋講解');
-      } else if (g.demo.moves.length > prev.demo) {
+      } else if (g.demo.base + g.demo.moves.length > prev.demo) {
         Sound.stone();
       }
       return;
@@ -476,7 +476,7 @@
     $('board').classList.toggle('teaching', demo && teach);
     updateGhost();
 
-    renderPlayers(record, pos, playing ? g.turn : 0, finished ? g.result.winner : 0);
+    renderPlayers(record, demo ? dv.pos : pos, playing ? g.turn : 0, finished ? g.result.winner : 0);
 
     var last = lastMoveBefore(record, record.moves.length);
     if (playing) {
@@ -525,8 +525,12 @@
       Array.prototype.forEach.call($('teachBox').querySelectorAll('[data-tool]'), function (b) {
         b.classList.toggle('on', b.getAttribute('data-tool') === state.tool);
       });
-      $('btnTeachUndo').disabled = !g.demo.moves.length;
-      $('btnTeachClear').disabled = !g.demo.moves.length && !g.demo.marks.length;
+      var dm = g.demo, atEnd = dv.base >= dv.total;
+      $('btnTeachBack').disabled = !dm.moves.length && dv.base <= 0;
+      $('btnTeachFwd').disabled = !dm.undone.length && (dm.moves.length > 0 || atEnd);
+      $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length && atEnd;
+      $('teachWhere').textContent = (atEnd ? '暫停時的局面' : '退回到第 ' + dv.pos.moveNo + ' 手') +
+        (dm.moves.length ? '＋變化 ' + dm.moves.length + ' 手' : '');
       $('btnTeachEnd').textContent = g.demo.from === 'playing' ? '結束擺棋，回到對局' : '結束擺棋';
     }
 
@@ -957,8 +961,19 @@
     state.tool = btn.getAttribute('data-tool');
     render();
   });
-  $('btnTeachUndo').addEventListener('click', function () {
-    act(function (x) { return M.demoUndo(x); });
+  function teachStep(forward) {
+    act(function (x) { return forward ? M.demoForward(x) : M.demoBack(x); });
+  }
+  $('btnTeachBack').addEventListener('click', function () { teachStep(false); });
+  $('btnTeachFwd').addEventListener('click', function () { teachStep(true); });
+  // 擺棋時也可以用鍵盤左右鍵
+  document.addEventListener('keydown', function (ev) {
+    if (state.mode !== 'play' || !state.game || state.game.status !== 'demo' || !canTeach()) return;
+    if (document.querySelector('dialog[open]')) return;
+    var tag = ev.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (ev.key === 'ArrowLeft') { teachStep(false); ev.preventDefault(); }
+    else if (ev.key === 'ArrowRight') { teachStep(true); ev.preventDefault(); }
   });
   $('btnTeachClear').addEventListener('click', function () {
     act(function (x) { return M.demoClear(x); });

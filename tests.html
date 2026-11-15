@@ -516,11 +516,39 @@
     var v = M0.demoView(g);
     eq([v.board[41], v.board[42], v.numbers[41], v.numbers[43], v.last], [W, B, 1, 3, 43]);
     eq(M.play(g, 44, 9000).ok, false, '擺棋時不能下正式的著手');
-    M0.demoUndo(g); eq(g.demo.moves.length, 2);
+    M0.demoBack(g); eq(g.demo.moves.length, 2, '上一手：收回最後一顆變化');
+    M0.demoForward(g); eq(g.demo.moves.length, 3, '下一手：擺回來');
     eq(M.endDemo(g, 600000), true);
     eq(g.status, 'playing'); eq(g.demo, null); eq(g.turn, W);
     eq(M.timeView(g, W, 601000).remaining, 56000, '回到對局後從現在繼續計時');
     eq(G.replay(g.record).board[41], 0, '變化的棋子不留在盤上');
+  });
+
+  test('擺棋講解：可以往回退對局的著手，從之前的局面擺變化', function () {
+    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 3, W, null, 0);
+    M.play(g, 0, 0);                              // 白 A9，現在共 4 手，輪到黑
+    M.startDemo(g, 0);
+    eq(g.demo.base, 4);
+    eq(M0.demoForward(g), false, '已經在最後，不能再往前');
+    M0.demoBack(g); M0.demoBack(g);
+    eq(g.demo.base, 2, '沒有變化時，上一手是退對局的著手（棋譜原有的也能退）');
+    var v = M0.demoView(g);
+    eq([v.board[0], v.board[60], v.board[20], v.base, v.total], [0, 0, W, 2, 4]);
+    eq(M0.demoNextColor(g), B, '退回去之後，輪流擺的第一手是當時該下的一方');
+    M0.demoPlay(g, 0, 30);
+    eq(g.demo.moves, [{ c: B, p: 30 }]);
+    eq(M0.demoForward(g), false, '有變化時不能往前進對局的著手');
+    M0.demoBack(g);
+    eq([g.demo.moves.length, g.demo.undone.length, g.demo.base], [0, 1, 2], '先收回變化');
+    M0.demoBack(g);
+    eq([g.demo.base, g.demo.undone.length], [1, 0], '再退就是退對局的著手，收回的變化作廢');
+    M0.demoBack(g); eq(M0.demoBack(g), false, '退到開頭為止');
+    M0.demoForward(g); M0.demoForward(g); M0.demoForward(g); M0.demoForward(g);
+    eq(g.demo.base, 4);
+    M0.demoBack(g); M0.demoMark(g, 5, 'tri'); M0.demoClear(g);
+    eq([g.demo.base, g.demo.marks.length], [4, 0], '全部清除會回到暫停時的局面');
+    M.endDemo(g, 0);
+    eq([g.record.moves.length, g.turn, g.status], [4, B, 'playing'], '對局本身完全沒變');
   });
 
   test('擺棋講解：變化裡可以提子', function () {
@@ -556,7 +584,10 @@
     M.resumePlay(g, 0);
     M.resign(g, W, 0);
     eq(M.startDemo(g, 0), true); eq(g.demo.from, 'finished');
-    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', moves: [], marks: [] }, '空的變化與標記會補回來');
+    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [] }, '空的變化與標記會補回來');
+    M0.demoBack(g);
+    eq(M.normalize(throughDatabase(g)).demo.base, 0, '退到第 0 步也要保留');
+    M0.demoForward(g);
     M0.demoPlay(g, 0, 41); M0.demoMark(g, 41, 'tri');
     var back = M.normalize(throughDatabase(g));
     eq(back.demo, g.demo); eq(back.status, 'demo');
