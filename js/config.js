@@ -25,7 +25,7 @@ window.GO_CONFIG = {
   // 沒有列在這裡的帳號登入時會被擋下。
   // 改了這裡，database.rules.json 也要跟著改（每間教室列出同樣的帳號），再貼到 Firebase 後台發布。
   rooms: [
-    { id: 'main',  teacher: 'teacher',  students: ['student1', 'student3'] },
+    { id: 'main',  teacher: 'teacher',  students: ['student1'] },
     { id: 'room2', teacher: 'teacher2', students: ['student2'] }
   ]
 };
