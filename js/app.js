@@ -735,6 +735,11 @@
     reader.readAsArrayBuffer(file);
   }
 
+  // 手機與平板不認得 .sgf 這種副檔名，有「只能選 .sgf」的限制時，檔案會變成灰色點不了、
+  // 甚至整個資料夾看起來是空的。所以觸控裝置上不設限，任何檔案都能選，內容不對再提示。
+  if (navigator.maxTouchPoints > 0 || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)) {
+    $('fileInput').removeAttribute('accept');
+  }
   $('btnPickFile').addEventListener('click', function () { $('fileInput').click(); });
   $('btnOtherFile').addEventListener('click', function () { $('fileInput').click(); });
   $('fileInput').addEventListener('change', function () {
