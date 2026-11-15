@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>規則引擎測試</title>
+<style>
+  body { font: 15px/1.6 "Microsoft JhengHei", sans-serif; margin: 24px; }
+  .ok { color: #1a7f37; } .bad { color: #c62828; font-weight: bold; }
+  li { list-style: none; }
+</style>
+</head>
+<body>
+<h1>規則引擎與棋譜測試</h1>
+<p id="summary"></p>
+<ul id="list"></ul>
+<script src="js/engine.js"></script>
+<script src="js/sgf.js"></script>
+<script src="js/game.js"></script>
+<script src="js/match.js"></script>
+<script>
+(function () {
+  var E = Go.Engine, S = Go.SGF, G = Go.Game, B = Go.BLACK, W = Go.WHITE;
+  var results = [];
+  function test(name, fn) {
+    try { fn(); results.push({ name: name, ok: true }); }
+    catch (e) { results.push({ name: name, ok: false, msg: String(e && e.message || e) }); }
+  }
+  function eq(a, b, what) {
+    var x = JSON.stringify(a), y = JSON.stringify(b);
+    if (x !== y) throw new Error((what || '值') + '：預期 ' + y + '，實際 ' + x);
+  }
+  /* 用文字畫棋盤：X 黑、O 白、. 空 */
+  function board(rows) {
+    var size = rows.length, pos = E.createPosition(size);
+    rows.forEach(function (row, y) {
+      row.replace(/\s/g, '').split('').forEach(function (ch, x) {
+        pos.board[y * size + x] = ch === 'X' ? B : ch === 'O' ? W : 0;
+      });
+    });
+    return pos;
+  }
+  function show(pos) {
+    var out = [];
+    for (var y = 0; y < pos.size; y++) {
+      var s = '';
+      for (var x = 0; x < pos.size; x++) s += '.XO'.charAt(pos.board[y * pos.size + x]);
+      out.push(s);
+    }
+    return out;
+  }
+  function at(size, x, y) { return y * size + x; }
+
+  test('角上提一子', function () {
+    var p = board(['O X . . .', '. . . . .', '. . . . .', '. . . . .', '. . . . .']);
+    var r = E.place(p, B, at(5, 0, 1), true);
+    eq(r.ok, true, 'ok'); eq(r.captured, [0], '被提的子'); eq(p.caps[B], 1, '黑提子數');
+    eq(show(p)[0], '.X...');
+  });
+
+  test('一次提掉整塊三子', function () {
+    var p = board(['. X X X .', 'X O O O X', '. X X . .', '. . . . .', '. . . . .']);
+    var r = E.place(p, B, at(5, 3, 2), true);
+    eq(r.captured.length, 3, '提子數'); eq(show(p)[1], 'X...X'); eq(p.ko, -1, '不是劫');
+  });
+
+  test('一手同時提掉兩塊', function () {
+    var p = board(['O . O X .', 'X X X . .', '. . . . .', '. . . . .', '. . . . .']);
+    var r = E.place(p, B, at(5, 1, 0), true);
+    eq(r.captured.length, 2, '提子數'); eq(show(p)[0], '.X.X.');
+  });
+
+  test('禁著點：自殺不能下', function () {
+    var p = board(['. X . . .', 'X . . . .', '. . . . .', '. . . . .', '. . . . .']);
+    var before = show(p);
+    var r = E.place(p, W, 0, true);
+    eq(r.ok, false); eq(r.reason, 'suicide'); eq(show(p), before, '棋盤不變');
+  });
+
+  test('看似自殺但能提子就可以下', function () {
+    var p = board(['. X O . .', 'X O . . .', 'O . . . .', '. . . . .', '. . . . .']);
+    var r = E.place(p, W, 0, true);
+    eq(r.ok, true); eq(r.captured.length, 2, '提掉兩顆黑子'); eq(show(p)[0], 'O.O..');
+  });
+
+  test('已有棋子的點不能下', function () {
+    var p = board(['X . .', '. . .', '. . .']);
+    eq(E.place(p, W, 0, true).reason, 'occupied');
+  });
+
+  test('打劫：不能立刻提回', function () {
+    var p = board(['. X O . .', 'X O . O .', '. X O . .', '. . . . .', '. . . . .']);
+    var r = E.place(p, B, at(5, 2, 1), true);
+    eq(r.captured, [at(5, 1, 1)], '提一子'); eq(p.ko, at(5, 1, 1), '劫點');
+    eq(E.check(p, W, at(5, 1, 1)), 'ko', '立刻提回');
+    eq(E.place(p, W, at(5, 4, 4), true).ok, true, '白找劫材');
+    eq(p.ko, -1, '劫點解除');
+    eq(E.place(p, B, at(5, 0, 4), true).ok, true, '黑應劫');
+    var back = E.place(p, W, at(5, 1, 1), true);
+    eq(back.ok, true, '白提回'); eq(p.ko, at(5, 2, 1), '換黑不能立刻提');
+  });
+
+  test('停一手後劫點解除', function () {
+    var p = board(['. X O . .', 'X O . O .', '. X O . .', '. . . . .', '. . . . .']);
+    E.place(p, B, at(5, 2, 1), true);
+    E.pass(p);
+    eq(E.check(p, W, at(5, 1, 1)), '');
+  });
+
+  test('提一子但落子與自己的棋相連，不算劫', function () {
+    var p = board(['. X O . .', 'X O . O .', '. X X . .', '. . . . .', '. . . . .']);
+    var r = E.place(p, B, at(5, 2, 1), true);
+    eq(r.captured.length, 1); eq(p.ko, -1);
+  });
+
+  test('check 不會改動局面', function () {
+    var p = board(['O X . . .', '. . . . .', '. . . . .', '. . . . .', '. . . . .']);
+    var before = show(p);
+    eq(E.check(p, B, at(5, 0, 1)), '');
+    eq(show(p), before); eq(p.caps[B], 0);
+  });
+
+  test('座標標示（跳過 I）', function () {
+    eq(E.label(19, at(19, 15, 3)), 'Q16');
+    eq(E.label(19, at(19, 8, 18)), 'J1');
+    eq(E.label(19, 0), 'A19');
+  });
+
+  test('讀取一般對局棋譜', function () {
+    var r = S.load('(;GM[1]FF[4]SZ[19]KM[6.5]PB[黑棋]PW[白棋]RE[B+R];B[pd];W[dp];B[];W[tt])');
+    eq(r.size, 19); eq(r.komi, 6.5); eq(r.info.pb, '黑棋'); eq(r.info.re, 'B+R');
+    eq(r.moves, [{ c: B, p: at(19, 15, 3) }, { c: W, p: at(19, 3, 15) }, { c: B, p: -1 }, { c: W, p: -1 }]);
+  });
+
+  test('有變化圖時只取主線', function () {
+    var r = S.load('(;SZ[9];B[ee](;W[ce];B[gc])(;W[gg];B[cc]))');
+    eq(r.moves.map(function (m) { return m.p; }), [at(9, 4, 4), at(9, 2, 4), at(9, 6, 2)]);
+  });
+
+  test('註解裡的括號與跳脫字元不會弄壞解析', function () {
+    var r = S.load('(;SZ[9]C[這裡有 \\] 和 (括號) ; 分號];B[aa]C[第二個 \\\\];W[bb])');
+    eq(r.moves.length, 2); eq(r.moves[1], { c: W, p: at(9, 1, 1) });
+  });
+
+  test('題目型棋譜：只有佈局子（MultiGo 寫法）', function () {
+    var r = S.load('(;CA[big5]AB[nd][pq]AW[dp][dd]\n[dq]AP[MultiGo:4.4.4]SZ[19]AB[qd]MULTIGOGM[1]\n)');
+    eq(r.moves.length, 0); eq(r.setup.b.length, 3); eq(r.setup.w.length, 3);
+    eq(G.naturalTurn(r, 0), B, '黑白都有子時黑先');
+  });
+
+  test('矩形寫法的佈局子與 PL', function () {
+    var r = S.load('(;SZ[9]AB[aa:bb]AW[ii]PL[W])');
+    eq(r.setup.b.length, 4); eq(r.first, W); eq(G.naturalTurn(r, 0), W);
+  });
+
+  test('野狐貼目寫法換算', function () {
+    eq(S.load('(;SZ[19]KM[375];B[aa])').komi, 7.5);
+    eq(S.load('(;SZ[19]KM[650];B[aa])').komi, 6.5);
+    eq(S.load('(;SZ[19]HA[2]AB[pd][dp];W[aa])').komi, 0.5);
+  });
+
+  test('不是棋譜的文字會報錯', function () {
+    var threw = false;
+    try { S.load('這不是棋譜'); } catch (e) { threw = true; }
+    eq(threw, true);
+  });
+
+  test('輸出後再讀回內容一致', function () {
+    var src = '(;SZ[13]KM[7.5]PB[A\\]B]AB[dd][jj]AW[dj];W[gg];B[];W[cc])';
+    var a = S.load(src), b = S.load(S.toSGF(a));
+    eq(b.moves, a.moves); eq(b.setup, a.setup); eq(b.size, 13); eq(b.info.pb, 'A]B');
+  });
+
+  test('重播：手數、提子數、最後一手', function () {
+    var r = S.load('(;SZ[5];B[ba];W[aa];B[ab];W[ee])');
+    var p3 = G.replay(r, 3);
+    eq(p3.moveNo, 3); eq(p3.caps[B], 1, '黑提一子'); eq(p3.last, at(5, 0, 1));
+    eq(p3.numbers[at(5, 0, 1)], 3); eq(p3.numbers[0], 0, '被提的子沒有手數');
+    eq(G.replay(r, 2).board[0], W, '第 2 手時白子還在');
+    eq(G.naturalTurn(r, 3), W); eq(G.naturalTurn(r, 4), B);
+  });
+
+  test('連續停一手的計數', function () {
+    var r = S.load('(;SZ[9];B[ee];W[];B[])');
+    eq(G.replay(r, 3).passes, 2); eq(G.replay(r, 2).passes, 1); eq(G.replay(r, 1).passes, 0);
+  });
+
+  test('讓子位置', function () {
+    eq(G.handicapPoints(19, 2), [at(19, 15, 3), at(19, 3, 15)]);
+    eq(G.handicapPoints(19, 9).length, 9); eq(G.handicapPoints(19, 5).indexOf(at(19, 9, 9)) >= 0, true);
+    eq(G.handicapPoints(9, 4).length, 4);
+    var rec = G.newRecord({ size: 19, handicap: 4 });
+    eq(rec.first, W); eq(rec.komi, 0.5); eq(G.naturalTurn(rec, 0), W);
+  });
+
+  test('星位數量', function () {
+    eq(G.starPoints(19).length, 9); eq(G.starPoints(13).length, 5); eq(G.starPoints(9).length, 5);
+  });
+
+  /* ---------- 第二階段：計時、悔棋、數目 ---------- */
+  // 時鐘用 since = 0 代表「停止」，所以測試的時間一律從 T0 起算（實際使用時是真實時間，不會是 0）
+  var T0 = 1000000, M0 = Go.Match;
+  var M = {
+    create: function (r, s, t, time, now) { return M0.create(r, s, t, time, now + T0); },
+    timeView: function (g, c, now) { return M0.timeView(g, c, now + T0); },
+    checkTimeout: function (g, now) { return M0.checkTimeout(g, now + T0); },
+    play: function (g, i, now) { return M0.play(g, i, now + T0); },
+    undo: function (g, c, now) { return M0.undo(g, c, now + T0); },
+    resign: function (g, c, now) { return M0.resign(g, c, now + T0); },
+    enterScoring: function (g, now) { return M0.enterScoring(g, now + T0); },
+    resumePlay: function (g, now) { return M0.resumePlay(g, now + T0); },
+    respond: function (g, a, now) { return M0.respond(g, a, now + T0); },
+    forceUndo: function (g, now) { return M0.forceUndo(g, now + T0); },
+    canUndo: M0.canUndo, toggleDead: M0.toggleDead, score: M0.score,
+    finishByScore: M0.finishByScore, request: M0.request,
+    agree: M0.agree, cancelRequest: M0.cancelRequest, normalize: M0.normalize
+  };
+  /* 模擬即時資料庫：存進去再讀出來時，null、空陣列、空物件都會消失 */
+  function throughDatabase(v) {
+    function strip(x) {
+      if (Array.isArray(x)) { var a = x.map(strip).filter(function (y) { return y !== undefined; }); return a.length ? a : undefined; }
+      if (x && typeof x === 'object') {
+        var o = {}, any = false;
+        Object.keys(x).forEach(function (k) { var y = strip(x[k]); if (y !== undefined) { o[k] = y; any = true; } });
+        return any ? o : undefined;
+      }
+      return x === null ? undefined : x;
+    }
+    var out = strip(JSON.parse(JSON.stringify(v)));
+    return out === undefined ? null : out;
+  }
+  function recordFrom(rows, komi) {
+    var rec = G.newRecord({ size: rows.length, komi: komi });
+    rows.forEach(function (row, y) {
+      row.replace(/\s/g, '').split('').forEach(function (ch, x) {
+        if (ch === 'X') rec.setup.b.push(y * rows.length + x);
+        if (ch === 'O') rec.setup.w.push(y * rows.length + x);
+      });
+    });
+    return rec;
+  }
+  function fresh(time) { return M.create(G.newRecord({ size: 9 }), 0, B, time, 0); }
+
+  test('不計時：沒有時鐘', function () {
+    eq(fresh(null).clock, null);
+    eq(fresh({ main: 0, byo: 30, periods: 0 }).clock, null, '全部為 0 視同不計時');
+    eq(M.timeView(fresh(null), B, 1000), null);
+  });
+
+  test('基本時間：只扣輪到的一方', function () {
+    var g = fresh({ main: 60, byo: 10, periods: 2 });
+    eq(M.timeView(g, B, 30000), { inByo: false, remaining: 30000, periods: 2, out: false });
+    eq(M.timeView(g, W, 30000).remaining, 60000, '白方還沒開始走');
+    eq(M.play(g, 40, 30000).ok, true);
+    eq(g.clock.left.b.main, 30000, '黑方剩 30 秒');
+    eq(M.timeView(g, B, 50000).remaining, 30000, '換白走時黑方不扣');
+    eq(M.timeView(g, W, 50000).remaining, 40000);
+  });
+
+  test('讀秒：時間內下完不扣次數，超過一次扣一次', function () {
+    var g = fresh({ main: 60, byo: 10, periods: 2 });
+    eq(M.timeView(g, B, 65000), { inByo: true, remaining: 5000, periods: 2, out: false });
+    eq(M.timeView(g, B, 71000), { inByo: true, remaining: 9000, periods: 1, out: false });
+    eq(M.timeView(g, B, 80000).out, true, '兩次讀秒用完');
+    M.play(g, 40, 65000);
+    eq(g.clock.left.b, { main: 0, periods: 2 }, '第一次讀秒內下完');
+    M.play(g, 41, 66000);
+    eq(M.timeView(g, B, 70000), { inByo: true, remaining: 6000, periods: 2, out: false }, '讀秒重新計算');
+    M.play(g, 42, 81000);
+    eq(g.clock.left.b.periods, 1, '用了 15 秒，扣一次');
+  });
+
+  test('超時判負', function () {
+    var g = fresh({ main: 60, byo: 10, periods: 2 });
+    eq(M.checkTimeout(g, 79999), false);
+    eq(M.checkTimeout(g, 80000), true);
+    eq(g.status, 'finished'); eq(g.result.winner, W); eq(g.result.sgf, 'W+T'); eq(g.result.text, '白勝（黑方超時）');
+    eq(M.play(g, 40, 90000).ok, false, '結束後不能再下');
+  });
+
+  test('沒有讀秒：基本時間用完就超時', function () {
+    var g = fresh({ main: 30, byo: 0, periods: 0 });
+    eq(M.timeView(g, B, 29000).out, false); eq(M.timeView(g, B, 30000).out, true);
+  });
+
+  test('超時後才點棋盤：判負而不是落子', function () {
+    var g = fresh({ main: 10, byo: 0, periods: 0 });
+    eq(M.play(g, 40, 20000), { ok: false, reason: 'timeout' });
+    eq(g.record.moves.length, 0); eq(g.status, 'finished');
+  });
+
+  test('點到不能下的地方不會重置讀秒', function () {
+    var g = fresh({ main: 0, byo: 10, periods: 3 });
+    M.play(g, 40, 1000);
+    eq(M.play(g, 40, 5000).reason, 'occupied');
+    eq(M.timeView(g, W, 7000).remaining, 4000, '白方的讀秒仍從 1 秒那時算起');
+  });
+
+  test('悔棋：剛下完退一手，對方已應則退兩手', function () {
+    var g = fresh(null);
+    eq(M.canUndo(g, B), false, '還沒下');
+    M.play(g, 40, 0);
+    eq(M.canUndo(g, B), true); eq(M.canUndo(g, W), false);
+    M.play(g, 41, 0);
+    eq(M.undo(g, B, 0), true);
+    eq(g.record.moves.length, 0, '退兩手'); eq(g.turn, B);
+    M.play(g, 40, 0); M.play(g, 41, 0);
+    eq(M.undo(g, W, 0), true);
+    eq(g.record.moves.length, 1, '退一手'); eq(g.turn, W);
+  });
+
+  test('悔棋不能退回棋譜原有的著手', function () {
+    var rec = S.load('(;SZ[9];B[ee];W[cc])');
+    var g = M.create(rec, 2, B, null, 0);
+    eq(M.canUndo(g, B), false); eq(M.canUndo(g, W), false);
+    M.play(g, 0, 0);
+    eq(M.canUndo(g, W), false, '白的著手是棋譜的');
+    eq(M.undo(g, B, 0), true); eq(g.record.moves.length, 2);
+  });
+
+  test('雙方連續停一手進入數目；棋譜裡原有的停一手不算', function () {
+    var g = M.create(S.load('(;SZ[9];B[ee];W[])'), 2, B, null, 0);
+    M.play(g, -1, 0);
+    eq(g.status, 'playing', '只有一手是新的');
+    M.play(g, -1, 0);
+    eq(g.status, 'scoring');
+    M.resumePlay(g, 0);
+    eq(g.status, 'playing');
+  });
+
+  test('數子：活子加圍住的空點', function () {
+    var rec = recordFrom(['. X O . .', '. X O . .', '. X O . .', '. X O . .', '. X O . .'], 0.5);
+    var g = M.create(rec, 0, B, null, 0);
+    M.enterScoring(g, 0);
+    var s = M.score(g);
+    eq([s.black, s.white], [10, 15]); eq(s.margin, -5.5); eq(s.winner, W);
+    M.finishByScore(g);
+    eq(g.result.text, '白勝 5.5 目'); eq(g.result.sgf, 'W+5.5'); eq(g.status, 'finished');
+  });
+
+  test('數子：標記死子後算對方的地，再點一次取消', function () {
+    var rec = recordFrom(['. X O . .', '. X O . .', 'O X O . .', 'O X O . .', '. X O . .'], 0);
+    var g = M.create(rec, 0, B, null, 0);
+    M.enterScoring(g, 0);
+    var before = M.score(g);
+    eq([before.black, before.white], [6.5, 18.5], '未標死子時左邊是雙方共有');
+    M.toggleDead(g, 10);
+    eq(g.dead, [10, 15], '整塊一起標');
+    var after = M.score(g);
+    eq([after.black, after.white], [10, 15]); eq(after.owner[10], B);
+    M.toggleDead(g, 15);
+    eq(g.dead, []);
+    M.toggleDead(g, 0);
+    eq(g.dead, [], '點空點沒有作用');
+  });
+
+  test('數子：讓子棋黑方貼還讓子數', function () {
+    var rec = recordFrom(['. X O . .', '. X O . .', '. X O . .', '. X O . .', '. X O . .'], 0.5);
+    rec.handicap = 2;
+    var g = M.create(rec, 0, W, null, 0);
+    M.enterScoring(g, 0);
+    eq(M.score(g).margin, -7.5);
+  });
+
+  test('認輸', function () {
+    var g = fresh({ main: 60, byo: 10, periods: 1 });
+    M.resign(g, B, 5000);
+    eq(g.result.text, '白勝（黑方認輸）'); eq(g.result.sgf, 'W+R'); eq(g.clock.since, 0, '時鐘停止');
+  });
+
+  test('申請：拒絕不生效，同意才生效', function () {
+    var g = fresh(null);
+    M.play(g, 40, 0);
+    eq(M.request(g, 'undo', W), false, '白還沒下過不能申請悔棋');
+    eq(M.request(g, 'undo', B), true);
+    eq(M.request(g, 'draw', W), false, '已有申請在等回覆');
+    eq(M.respond(g, false, 0), false); eq(g.record.moves.length, 1); eq(g.request, null);
+    M.request(g, 'undo', B);
+    eq(M.respond(g, true, 0), true); eq(g.record.moves.length, 0);
+    M.request(g, 'count', B); M.respond(g, true, 0);
+    eq(g.status, 'scoring');
+    M.resumePlay(g, 0);
+    M.request(g, 'draw', B); M.respond(g, true, 0);
+    eq(g.result.text, '和棋（雙方同意）'); eq(g.result.sgf, '0');
+  });
+
+  test('數目時時鐘停止，繼續對局後重新計時', function () {
+    var g = fresh({ main: 60, byo: 0, periods: 0 });
+    M.play(g, -1, 10000); M.play(g, -1, 15000);
+    eq(g.status, 'scoring'); eq(g.clock.left.b.main, 50000); eq(g.clock.left.w.main, 55000);
+    eq(M.timeView(g, B, 999999).remaining, 50000, '數目中不扣時間');
+    M.resumePlay(g, 100000);
+    eq(M.timeView(g, B, 105000).remaining, 45000);
+  });
+
+  /* ---------- 第三階段：連線同步 ---------- */
+  test('剛開局的對局經過資料庫後能完整還原', function () {
+    var g = fresh({ main: 60, byo: 10, periods: 2 });
+    var raw = throughDatabase(g);
+    eq(raw.record.moves, undefined, '空的著手列表在資料庫裡不存在');
+    var back = M.normalize(raw);
+    eq(back.record.moves, []); eq(back.record.setup, { b: [], w: [] }); eq(back.dead, []);
+    eq(back.request, null); eq(back.result, null); eq(back.agree, { b: false, w: false });
+    eq(back.clock.left.b, { main: 60000, periods: 2 });
+    eq(M.play(back, 40, 1000).ok, true, '還原後可以正常落子');
+  });
+
+  test('進行中的對局（含停一手、佈局子、申請）經過資料庫後內容一致', function () {
+    var rec = S.load('(;SZ[9]KM[6.5]PB[老師]AB[cc][gg]AW[cg];B[ee];W[];B[dd])');
+    var g = M.create(rec, 3, W, null, 0);
+    g.teacherColor = W;
+    M.play(g, 0, 0);
+    M.request(g, 'undo', W);
+    var back = M.normalize(throughDatabase(g));
+    eq(back.record, g.record); eq(back.request, { type: 'undo', from: W }); eq(back.teacherColor, W);
+    eq(back.turn, B); eq(back.startAt, 3); eq(back.clock, null);
+    eq(G.replay(back.record).board, G.replay(g.record).board, '盤面相同');
+  });
+
+  test('數目與結束狀態經過資料庫後內容一致', function () {
+    var rec = recordFrom(['. X O . .', '. X O . .', 'O X O . .', 'O X O . .', '. X O . .'], 0);
+    var g = M.create(rec, 0, B, null, 0);
+    M.enterScoring(g, 0); M.toggleDead(g, 10); M.agree(g, B);
+    var back = M.normalize(throughDatabase(g));
+    eq(back.status, 'scoring'); eq(back.dead, [10, 15]); eq(back.agree, { b: true, w: false });
+    M.agree(back, W);
+    eq(back.status, 'finished'); eq(back.result.text, '白勝 5 目');
+    var done = M.normalize(throughDatabase(back));
+    eq(done.result.sgf, 'W+5'); eq(done.result.winner, W); eq(M.score(done).black, 10);
+  });
+
+  test('沒有對局時 normalize 回傳 null', function () {
+    eq(M.normalize(null), null); eq(M.normalize({}), null);
+  });
+
+  test('數目：雙方都確認才結束，死子變動要重新確認', function () {
+    var rec = recordFrom(['. X O . .', '. X O . .', 'O X O . .', 'O X O . .', '. X O . .'], 0);
+    var g = M.create(rec, 0, B, null, 0);
+    M.enterScoring(g, 0);
+    M.agree(g, B);
+    eq(g.status, 'scoring', '只有一方確認');
+    M.toggleDead(g, 10);
+    eq(g.agree, { b: false, w: false }, '標記變動後確認取消');
+    M.agree(g, W); M.agree(g, B);
+    eq(g.status, 'finished');
+  });
+
+  test('申請的回覆會留下紀錄，提出的一方可以收回', function () {
+    var g = fresh(null);
+    M.play(g, 40, 0);
+    M.request(g, 'undo', B);
+    eq(M.cancelRequest(g, W), false, '不是自己提的不能收回');
+    eq(M.cancelRequest(g, B), true); eq(g.request, null); eq(g.reply, null);
+    M.request(g, 'draw', W); M.respond(g, false, 0);
+    eq(g.reply, { type: 'draw', from: W, ok: false, n: 1 });
+    M.request(g, 'undo', B); M.respond(g, true, 0);
+    eq(g.reply, { type: 'undo', from: B, ok: true, n: 2 });
+  });
+
+  test('老師強制退一手：不需同意，但不能退棋譜原有的著手', function () {
+    var g = M.create(S.load('(;SZ[9];B[ee];W[cc])'), 2, B, null, 0);
+    eq(M.forceUndo(g, 0), false);
+    M.play(g, 0, 0); M.play(g, 1, 0);
+    eq(M.forceUndo(g, 0), true); eq(g.record.moves.length, 3); eq(g.turn, W);
+    eq(M.forceUndo(g, 0), true); eq(M.forceUndo(g, 0), false); eq(g.record.moves.length, 2); eq(g.turn, B);
+  });
+
+  var pass = results.filter(function (r) { return r.ok; }).length;
+  document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
+  document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';
+  document.getElementById('list').innerHTML = results.map(function (r) {
+    return '<li class="' + (r.ok ? 'ok' : 'bad') + '">' + (r.ok ? '✓ ' : '✗ ') + r.name +
+      (r.ok ? '' : ' — ' + r.msg.replace(/</g, '&lt;')) + '</li>';
+  }).join('');
+  window.__results = results;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# 資料庫規則只在 Firebase 後台使用，不需要放到網站上
+database.rules.json
+
+# 本機暫存
+.claude/
+*.log
