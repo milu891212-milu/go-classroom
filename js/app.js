@@ -773,14 +773,13 @@
   /* ---------- 新對局 ---------- */
   /* 慣用貼目：比目法 6.5、數子法 7.5；讓子棋 0.5 */
   var STD_KOMI = { territory: 6.5, area: 7.5 };
-  var komiTouched = false;
+  function stdKomi(rule, handicap) { return handicap ? 0.5 : STD_KOMI[rule === 'area' ? 'area' : 'territory']; }
+  // 換了數目方式或讓子數，貼目就帶入該規則的慣用值；之後仍可以自己改數字
   function defaultKomi() {
-    if (komiTouched) return;
-    $('newKomi').value = $('newHandicap').value === '0' ? STD_KOMI[$('newRule').value] : 0.5;
+    $('newKomi').value = stdKomi($('newRule').value, $('newHandicap').value !== '0');
   }
   $('newRule').value = prefs.rule;
   defaultKomi();
-  $('newKomi').addEventListener('input', function () { komiTouched = true; });
   $('newHandicap').addEventListener('change', defaultKomi);
   $('newRule').addEventListener('change', defaultKomi);
   $('btnNew').addEventListener('click', function () {
@@ -822,15 +821,14 @@
     $('startDesc').textContent = desc;
     var turn = G.naturalTurn(src, state.cursor);
     document.querySelector('input[name="startTurn"][value="' + turn + '"]').checked = true;
-    $('startKomi').value = src.komi;
+    // 貼目不沿用棋譜裡的數字，一律依數目方式帶入：比目法 6.5、數子法 7.5（讓子棋 0.5）；之後仍可以自己改
     $('startRule').value = prefs.rule;
+    $('startKomi').value = stdKomi(prefs.rule, src.handicap > 0);
     startTime.show();
     $('dlgStart').showModal();
   });
-  // 貼目是另一種規則的慣用值時，換規則就跟著換（自己填的其他數字不動）
   $('startRule').addEventListener('change', function () {
-    var komi = parseFloat($('startKomi').value);
-    if (komi === STD_KOMI.territory || komi === STD_KOMI.area) $('startKomi').value = STD_KOMI[this.value];
+    $('startKomi').value = stdKomi(this.value, state.source && state.source.handicap > 0);
   });
   $('startOk').addEventListener('click', function () {
     var record = G.cloneRecord(state.source);
