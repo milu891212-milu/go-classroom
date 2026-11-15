@@ -17,6 +17,7 @@
 <script src="js/sgf.js"></script>
 <script src="js/game.js"></script>
 <script src="js/match.js"></script>
+<script src="js/net.js"></script>
 <script>
 (function () {
   var E = Go.Engine, S = Go.SGF, G = Go.Game, B = Go.BLACK, W = Go.WHITE;
@@ -609,6 +610,28 @@
     M.endDemo(g, 0);
     eq(g.status, 'finished'); eq(g.result.sgf, 'B+R');
     eq(M.normalize(throughDatabase(g)).demo, null);
+  });
+
+  /* ---------- 教室分配 ---------- */
+  test('教室分配：老師與學生依設定進各自的教室，沒列到的帳號進不來', function () {
+    var cfg = { rooms: [
+      { id: 'main', teacher: 'teacher', students: ['student1', 'student3'] },
+      { id: 'room2', teacher: 'teacher2', students: ['student2'] }
+    ] };
+    var seat = Go.Net.seatOf;
+    eq(seat(cfg, 'teacher'), { room: 'main', role: 'teacher' });
+    eq(seat(cfg, 'student1'), { room: 'main', role: 'student' });
+    eq(seat(cfg, 'student3'), { room: 'main', role: 'student' });
+    eq(seat(cfg, 'teacher2'), { room: 'room2', role: 'teacher' });
+    eq(seat(cfg, 'Student2'), { room: 'room2', role: 'student' }, '大小寫不影響');
+    eq(seat(cfg, 'student9'), null);
+    eq(seat(cfg, ''), null);
+  });
+
+  test('教室分配：舊的設定寫法（只有 teachers）所有帳號共用一間', function () {
+    var old = { teachers: ['teacher'], room: 'main' };
+    eq(Go.Net.seatOf(old, 'teacher'), { room: 'main', role: 'teacher' });
+    eq(Go.Net.seatOf(old, 'anyone'), { room: 'main', role: 'student' });
   });
 
   var pass = results.filter(function (r) { return r.ok; }).length;

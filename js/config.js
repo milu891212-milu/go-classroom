@@ -21,9 +21,11 @@ window.GO_CONFIG = {
   // （Firebase 的帳號必須是電子郵件格式，這個網域只是湊格式用，不會真的寄信）
   accountDomain: 'goclass.example.com',
 
-  // 哪些帳號是老師（其餘都是學生）。要與 database.rules.json 裡列出的帳號一致
-  teachers: ['teacher'],
-
-  // 對局室名稱，一般不用改
-  room: 'main'
+  // 教室分配：每間教室一位老師配幾個學生帳號，不同教室互相看不到對方的棋，可以同時上課。
+  // 沒有列在這裡的帳號登入時會被擋下。
+  // 改了這裡，database.rules.json 也要跟著改（每間教室列出同樣的帳號），再貼到 Firebase 後台發布。
+  rooms: [
+    { id: 'main',  teacher: 'teacher',  students: ['student1', 'student3'] },
+    { id: 'room2', teacher: 'teacher2', students: ['student2'] }
+  ]
 };

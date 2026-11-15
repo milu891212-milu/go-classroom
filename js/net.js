@@ -136,11 +136,41 @@
     return '登入失敗' + (code ? '（' + code + '）' : '');
   }
 
+  /*
+   * 教室分配：每間教室一位老師配幾個學生帳號，不同教室互相看不到對方的棋。
+   * 設定寫在 config.js 的 rooms：[{ id, teacher, students: [...] }, ...]
+   * （舊寫法只有 teachers 與 room：所有帳號共用一間教室，仍然相容。）
+   */
+  function roomList(cfg) {
+    function low(v) { return String(v).toLowerCase(); }
+    if (cfg && Array.isArray(cfg.rooms) && cfg.rooms.length) {
+      return cfg.rooms.map(function (r) {
+        return { id: String(r.id), teachers: [low(r.teacher)], students: (r.students || []).map(low) };
+      });
+    }
+    return [{ id: (cfg && cfg.room) || 'main', teachers: ((cfg && cfg.teachers) || ['teacher']).map(low), students: null }];
+  }
+
+  /* 這個帳號屬於哪間教室、是老師還是學生。沒有分配到教室則回傳 null。 */
+  function seatOf(cfg, account) {
+    var rooms = roomList(cfg), a = String(account || '').toLowerCase(), i;
+    for (i = 0; i < rooms.length; i++) {
+      if (rooms[i].teachers.indexOf(a) >= 0) return { room: rooms[i].id, role: 'teacher' };
+    }
+    for (i = 0; i < rooms.length; i++) {
+      if (!rooms[i].students || rooms[i].students.indexOf(a) >= 0) return { room: rooms[i].id, role: 'student' };
+    }
+    return null;
+  }
+
+  var NO_ROOM = '這個帳號還沒有分配教室，請向老師確認。';
+
   function FirebaseBackend(cfg) {
     var self = this;
     this.kind = 'firebase';
+    this.cfg = cfg;
     this.domain = cfg.accountDomain || 'goclass.example.com';
-    this.teachers = (cfg.teachers || ['teacher']).map(function (t) { return String(t).toLowerCase(); });
+    this.room = null;   // 登入後才知道是哪一間教室
     this.offset = 0;
     this.connected = false;
     this.user = null;
@@ -159,7 +189,6 @@
       fb.initializeApp(cfg.firebase);
       self.auth = fb.auth();
       self.db = fb.database();
-      self.room = self.db.ref('rooms/' + (cfg.room || 'main'));
 
       self.db.ref('.info/serverTimeOffset').on('value', function (s) { self.offset = s.val() || 0; });
       self.db.ref('.info/connected').on('value', function (s) {
@@ -170,7 +199,14 @@
       self.auth.onAuthStateChanged(function (u) {
         if (u) {
           var account = String(u.email || '').toLowerCase().split('@')[0];
-          self.user = { account: account, role: self.teachers.indexOf(account) >= 0 ? 'teacher' : 'student' };
+          var seat = seatOf(self.cfg, account);
+          if (!seat) {
+            // 帳號存在但沒有分配教室：直接登出（登出後會再進來這裡一次，走下面的 else）
+            self.auth.signOut();
+            return;
+          }
+          self.room = self.db.ref('rooms/' + seat.room);
+          self.user = { account: account, role: seat.role, room: seat.room };
         } else {
           self.user = null;
           self.presenceRef = null;
@@ -187,7 +223,10 @@
     var self = this;
     return this.ready.then(function () {
       var email = account.indexOf('@') >= 0 ? account : account + '@' + self.domain;
-      return self.auth.signInWithEmailAndPassword(email.trim().toLowerCase(), password);
+      email = email.trim().toLowerCase();
+      return self.auth.signInWithEmailAndPassword(email, password).then(function () {
+        if (!seatOf(self.cfg, email.split('@')[0])) throw new Error(NO_ROOM);
+      });
     }).then(noop, function (err) {
       throw new Error(err && err.code ? authMessage(err) : (err && err.message) || '登入失敗');
     });
@@ -256,6 +295,7 @@
   /* ================= 選擇要用哪一種 ================= */
 
   Go.Net = {
+    seatOf: seatOf,
     /* 回傳連線物件；沒有設定 Firebase、也不是測試模式時回傳 null（純單機） */
     create: function (cfg, search) {
       var m = /[?&]demo=(teacher|student)\b/.exec(search || '');
