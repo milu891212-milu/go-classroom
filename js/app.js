@@ -41,7 +41,7 @@
     confirm: false,
     sound: true,
     rule: 'territory',   // 上次選的數目方式：'territory' 比目法、'area' 數子法
-    time: { preset: '1200,30,3', main: 20, byo: 30, periods: 3 }
+    time: { preset: '300,30,3', main: 20, byo: 30, periods: 3 }
   };
   try {
     var saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
@@ -171,8 +171,6 @@
     ['none', '不計時'],
     ['60,20,3', '1 分＋20 秒 × 3 次'],
     ['300,30,3', '5 分＋30 秒 × 3 次'],
-    ['600,30,3', '10 分＋30 秒 × 3 次'],
-    ['1200,30,3', '20 分＋30 秒 × 3 次'],
     ['3600,60,3', '60 分＋60 秒 × 3 次'],
     ['custom', '自訂']
   ];
@@ -195,7 +193,19 @@
     return {
       show: function () {
         sel.value = prefs.time.preset;
-        if (sel.selectedIndex < 0) sel.value = 'none';
+        if (sel.selectedIndex < 0) {
+          // 上次選的是已經拿掉的選項（例如 20 分＋30 秒 × 3 次）：改成自訂並帶入同樣的數字
+          var old = /^(\d+),(\d+),(\d+)$/.exec(prefs.time.preset);
+          if (old) {
+            prefs.time.main = Math.round(old[1] / 60);
+            prefs.time.byo = +old[2];
+            prefs.time.periods = +old[3];
+            prefs.time.preset = 'custom';
+          } else {
+            prefs.time.preset = 'none';
+          }
+          sel.value = prefs.time.preset;
+        }
         main.value = prefs.time.main;
         byo.value = prefs.time.byo;
         per.value = prefs.time.periods;
