@@ -189,6 +189,14 @@ body.dragging .drop { border-color: var(--accent); background: var(--accent-soft
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .grid2 .span2 { grid-column: 1 / -1; }
 
+/* 老師擺棋講解的工具列 */
+.teach { display: flex; flex-direction: column; gap: 8px; }
+.teach-title { font-size: 13px; color: var(--muted); }
+.tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 6px; }
+.tools .btn { padding: 4px 6px; }
+.btn.on, .btn.on:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+#board.teaching { cursor: crosshair; }
+
 .custom-time { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 10px 0; color: var(--muted); }
 .custom-time input { width: 64px; padding: 6px 8px; }
 

@@ -40,7 +40,7 @@
     if (voiceLoading || !global.fetch) return;
     voiceLoading = true;
     VOICE.forEach(function (name) {
-      global.fetch('audio/' + name + '.wav').then(function (res) {
+      global.fetch('audio/' + name + '.wav?v=2').then(function (res) {
         if (!res.ok) throw new Error('missing');
         return res.arrayBuffer();
       }).then(function (buf) {

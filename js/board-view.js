@@ -98,13 +98,16 @@
   };
 
   /*
-   * 畫棋子。opts: { board, last, numbers, ko, dead, owner }
+   * 畫棋子。opts: { board, last, numbers, ko, dead, owner, marks }
    *   numbers 有給就顯示手數；ko >= 0 會在劫點畫方框。
+   *   marks 是老師擺棋時的標記 [{ p, t }]。
    *   dead / owner 是數目用：死子畫成半透明，空點與死子上用小方塊標出是誰的地。
    */
   BoardView.prototype.render = function (opts) {
     var size = this.size, board = opts.board, dead = opts.dead, owner = opts.owner, h = '';
     var idx, p, black;
+    var marked = {};   // 有標記的點：棋子上的手數與「最後一手」記號讓給標記
+    if (opts.marks) for (idx = 0; idx < opts.marks.length; idx++) marked[opts.marks[idx].p] = true;
     for (idx = 0; idx < size * size; idx++) {
       var c = board[idx];
       if (!c) continue;
@@ -119,6 +122,7 @@
       h += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + R + '" fill="url(#' + (black ? 'stoneB' : 'stoneW') + ')"' +
         (black ? '' : ' stroke="#9a948a" stroke-width="1.5"') + '/>';
 
+      if (marked[idx]) continue;
       var isLast = idx === opts.last;
       var n = opts.numbers ? opts.numbers[idx] : 0;
       if (n > 0) {
@@ -142,7 +146,35 @@
       var k = this.xy(opts.ko);
       h += '<rect x="' + (k.x - 20) + '" y="' + (k.y - 20) + '" width="40" height="40" fill="none" stroke="#4a3414" stroke-width="6"/>';
     }
+    if (opts.marks) {
+      for (idx = 0; idx < opts.marks.length; idx++) h += this._mark(opts.marks[idx], board[opts.marks[idx].p]);
+    }
     this.stonesLayer.innerHTML = h;
+  };
+
+  /* 一個標記。t：'tri' 三角形、'sq' 方塊、'cir' 圓圈、'x' 叉，其餘當成文字（A、B、C…） */
+  BoardView.prototype._mark = function (mark, stone) {
+    var p = this.xy(mark.p), x = p.x, y = p.y, t = mark.t, h = '';
+    var color = stone === BLACK ? '#ffffff' : (stone ? '#111111' : '#a01818');
+    var line = ' fill="none" stroke="' + color + '" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"';
+    if (!stone) {
+      // 空點上先蓋一小塊棋盤色，免得標記和格線疊在一起看不清楚
+      h += '<circle cx="' + x + '" cy="' + y + '" r="34" fill="#e6b96a"/>';
+    }
+    if (t === 'tri') {
+      h += '<polygon points="' + x + ',' + (y - 29) + ' ' + (x - 27) + ',' + (y + 18) + ' ' + (x + 27) + ',' + (y + 18) + '"' + line + '/>';
+    } else if (t === 'sq') {
+      h += '<rect x="' + (x - 21) + '" y="' + (y - 21) + '" width="42" height="42"' + line + '/>';
+    } else if (t === 'cir') {
+      h += '<circle cx="' + x + '" cy="' + y + '" r="23"' + line + '/>';
+    } else if (t === 'x') {
+      h += '<path d="M' + (x - 20) + ' ' + (y - 20) + 'L' + (x + 20) + ' ' + (y + 20) +
+        'M' + (x + 20) + ' ' + (y - 20) + 'L' + (x - 20) + ' ' + (y + 20) + '"' + line + '/>';
+    } else {
+      var ch = String(t).replace(/[^A-Za-z0-9]/g, '').slice(0, 2);
+      h += '<text class="num" x="' + x + '" y="' + y + '" font-size="58" fill="' + color + '">' + ch + '</text>';
+    }
+    return h;
   };
 
   /* 預覽棋子。firm = true 代表「等待確認」的落點，畫得比較明顯。idx < 0 則清除。 */

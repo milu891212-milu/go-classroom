@@ -40,10 +40,12 @@
     numbers: false,
     confirm: false,
     sound: true,
+    rule: 'territory',   // 上次選的數目方式：'territory' 比目法、'area' 數子法
     time: { preset: '1200,30,3', main: 20, byo: 30, periods: 3 }
   };
   try {
     var saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
+    if (saved.rule === 'area') prefs.rule = 'area';
     prefs.numbers = !!saved.numbers;
     prefs.confirm = !!saved.confirm;
     if (saved.sound === false) prefs.sound = false;
@@ -69,8 +71,13 @@
     snap: null,        // 上一次看到的對局摘要，用來判斷發生了什麼事（連線用）
     pending: -1,       // 「落子前先確認」時暫定的落點
     hover: -1,
-    pos: null          // 目前畫面上的局面
+    pos: null,         // 目前畫面上的局面
+    tool: 'alt'        // 老師擺棋時選的工具：alt / b / w（擺子）或 tri / sq / cir / x / letter（標記）
   };
+  var RULE_NAME = { territory: '比目法', area: '數子法' };
+  var STONE_TOOL = { alt: 0, b: BLACK, w: WHITE };
+  /* 這台裝置能不能擺棋講解（連線時只有老師；單機都可以） */
+  function canTeach() { return !online() || isTeacher(); }
   var byoAnnounced = {};   // 各方進入讀秒後，上次看到的剩餘次數（還沒進讀秒則沒有值）
   var beepKey = '';        // 避免同一秒重複響
   var timeoutBusy = false; // 正在送出「超時」
@@ -240,7 +247,12 @@
   }
 
   function snapshot(g) {
-    return { n: g.record.moves.length, status: g.status, reply: g.reply ? g.reply.n : 0 };
+    return {
+      n: g.record.moves.length,
+      status: g.status,
+      reply: g.reply ? g.reply.n : 0,
+      demo: g.demo ? g.demo.moves.length : 0
+    };
   }
 
   /* 比對前後狀態，發出對應的音效與提示（自己或對方的動作都走這裡） */
@@ -248,6 +260,23 @@
     if (!prev) return;
     var n = g.record.moves.length;
     if (n !== prev.n) { state.pending = -1; beepKey = ''; }
+
+    // 老師擺棋講解：開始、結束、擺了一顆變化
+    if (g.status === 'demo') {
+      if (prev.status !== 'demo') {
+        closeGameDialogs();
+        Sound.notice();
+        toast(prev.status === 'playing' ? '對局暫停，開始擺棋講解' : '開始擺棋講解');
+      } else if (g.demo.moves.length > prev.demo) {
+        Sound.stone();
+      }
+      return;
+    }
+    if (prev.status === 'demo') {
+      Sound.notice();
+      toast(g.status === 'playing' ? '回到對局，輪到' + side(g.turn) : '結束擺棋講解');
+      return;
+    }
 
     if (g.status === 'finished' && prev.status !== 'finished') {
       closeGameDialogs();
@@ -415,28 +444,36 @@
       ['讓子', record.handicap ? record.handicap + ' 子' : '']]);
   }
 
-  var REQUEST_LABEL = { undo: '悔棋', count: '數子', draw: '和棋' };
+  var REQUEST_LABEL = { undo: '悔棋', count: '數目', draw: '和棋' };
 
   function renderPlay() {
     var g = state.game, record = g.record;
     var playing = g.status === 'playing', scoring = g.status === 'scoring', finished = g.status === 'finished';
+    var demo = g.status === 'demo', teach = canTeach();
     var pos = G.replay(record);
-    state.pos = pos;
+    var dv = demo ? M.demoView(g) : null;
+    state.pos = demo ? dv.pos : pos;   // 擺棋時，能不能下要看加上變化之後的局面
     var sc = (scoring || (finished && g.result.reason === 'score')) ? M.score(g) : null;
     var myTurn = playing && controls(g.turn);
 
-    $('modeTag').textContent = playing ? '對弈中' : (scoring ? '數目中' : '對局結束');
+    $('modeTag').textContent = playing ? '對弈中' : scoring ? '數目中' : demo ? '擺棋講解' : '對局結束';
     view.setSize(record.size);
-    view.render({
-      board: pos.board,
-      last: pos.last,
-      numbers: prefs.numbers && !sc ? pos.numbers : null,
-      ko: playing ? pos.ko : -1,
-      dead: sc ? sc.dead : null,
-      owner: sc ? sc.owner : null
-    });
+    if (demo) {
+      // 變化的棋子一律顯示 1、2、3…，方便講解順序
+      view.render({ board: dv.board, last: dv.last, numbers: dv.numbers, ko: -1, marks: g.demo.marks });
+    } else {
+      view.render({
+        board: pos.board,
+        last: pos.last,
+        numbers: prefs.numbers && !sc ? pos.numbers : null,
+        ko: playing ? pos.ko : -1,
+        dead: sc ? sc.dead : null,
+        owner: sc ? sc.owner : null
+      });
+    }
     $('board').classList.toggle('playing', myTurn);
     $('board').classList.toggle('scoring', scoring);
+    $('board').classList.toggle('teaching', demo && teach);
     updateGhost();
 
     renderPlayers(record, pos, playing ? g.turn : 0, finished ? g.result.winner : 0);
@@ -444,9 +481,15 @@
     var last = lastMoveBefore(record, record.moves.length);
     if (playing) {
       setStatus('輪到' + side(g.turn) + (online() ? (myTurn ? '（你）' : '（對方）') : ''),
-        '第 ' + (pos.moveNo + 1) + ' 手' + (last ? '　上一手：' + G.describeMove(record, last) : '') + '　貼目 ' + record.komi);
+        '第 ' + (pos.moveNo + 1) + ' 手' + (last ? '　上一手：' + G.describeMove(record, last) : '') +
+        '　' + RULE_NAME[g.rule] + '　貼目 ' + record.komi);
     } else if (scoring) {
-      setStatus('數目中', online() ? '標記死子後，雙方都按「確認結果」' : '請標記死子，確認後算出勝負');
+      setStatus('數目中（' + RULE_NAME[g.rule] + '）',
+        online() ? '標記死子後，雙方都按「確認結果」' : '請標記死子，確認後算出勝負');
+    } else if (demo) {
+      setStatus(online() && !teach ? '老師擺棋講解中' : '擺棋講解中',
+        (g.demo.from === 'playing' ? '對局暫停，時間不會走。' : '') +
+        (teach ? '在棋盤上擺變化或加標記' + (online() ? '，學生會同步看到' : '') : '請看棋盤'));
     } else {
       setStatus(g.result.text, '共 ' + pos.moveNo + ' 手');
     }
@@ -474,15 +517,40 @@
     $('btnEnd').hidden = online() && !isTeacher();
     $('btnEnd').textContent = state.source ? '結束對局，回到棋譜' : '結束對局';
 
+    // 老師擺棋講解
+    $('btnTeach').hidden = !(teach && (playing || finished));
+    $('btnTeach').textContent = playing ? '暫停對局，擺棋講解' : '擺棋講解';
+    $('teachBox').hidden = !(demo && teach);
+    if (demo && teach) {
+      Array.prototype.forEach.call($('teachBox').querySelectorAll('[data-tool]'), function (b) {
+        b.classList.toggle('on', b.getAttribute('data-tool') === state.tool);
+      });
+      $('btnTeachUndo').disabled = !g.demo.moves.length;
+      $('btnTeachClear').disabled = !g.demo.moves.length && !g.demo.marks.length;
+      $('btnTeachEnd').textContent = g.demo.from === 'playing' ? '結束擺棋，回到對局' : '結束擺棋';
+    }
+
     if (sc) {
       var diff = Math.abs(sc.margin);
-      infoRows($('scoreInfo'), [
-        ['黑方', sc.black + ' 子'],
-        ['白方', sc.white + ' 子'],
-        ['貼目', sc.komi + ' 目'],
-        ['讓子貼還', sc.handicap ? sc.handicap + ' 目' : ''],
-        ['結果', sc.winner ? G.colorName(sc.winner) + '勝 ' + diff + ' 目' : '和棋']
-      ]);
+      var resultText = sc.winner ? G.colorName(sc.winner) + '勝 ' + diff + ' 目' : '和棋';
+      if (sc.rule === 'territory') {
+        infoRows($('scoreInfo'), [
+          ['數目方式', '比目法'],
+          ['黑方', '地 ' + sc.terrB + '＋提子 ' + sc.capB + '＝' + sc.black + ' 目'],
+          ['白方', '地 ' + sc.terrW + '＋提子 ' + sc.capW + '＝' + sc.white + ' 目'],
+          ['貼目', sc.komi + ' 目'],
+          ['結果', resultText]
+        ]);
+      } else {
+        infoRows($('scoreInfo'), [
+          ['數目方式', '數子法'],
+          ['黑方', sc.black + ' 子'],
+          ['白方', sc.white + ' 子'],
+          ['貼目', sc.komi + ' 目'],
+          ['讓子貼還', sc.handicap ? sc.handicap + ' 目' : ''],
+          ['結果', resultText]
+        ]);
+      }
     }
     if (scoring) {
       var mine = online() && g.agree[key(myColor())];
@@ -490,7 +558,8 @@
       $('btnAgree').disabled = !!mine;
       $('btnAgree').textContent = mine ? '已確認，等對方' : '確認結果';
       $('scoreHint').textContent = (theirs ? '對方已經確認結果。' : '') +
-        '點選棋盤上的死子來標記，再點一次取消。小方塊表示那一點算誰的。';
+        '點選棋盤上的死子來標記，再點一次取消。小方塊表示那一點算誰的' +
+        (g.rule === 'territory' ? '地；沒有方塊的空點是單官，不算目。' : '。');
     }
 
     // 申請：輪到這台裝置回覆就跳出視窗；自己提出的則顯示等待中
@@ -501,7 +570,7 @@
       $('reqTitle').textContent = REQUEST_LABEL[r.type];
       $('reqText').textContent = side(r.from) + ({
         undo: '想要悔棋，',
-        count: '提議結束對局、開始數子，',
+        count: '提議結束對局、開始數目，',
         draw: '提議和棋，'
       }[r.type]) + side(E.other(r.from)) + '同意嗎？';
       if (!dlg.open) dlg.showModal();
@@ -534,6 +603,17 @@
 
   function updateGhost() {
     var g = state.game;
+    if (state.mode === 'play' && g.status === 'demo') {
+      // 擺棋：選的是擺子工具時，預覽下一顆會是什麼顏色
+      var fixed = STONE_TOOL[state.tool];
+      if (!canTeach() || fixed === undefined || state.hover < 0) { view.setGhost(-1); return; }
+      var c = fixed || M.demoNextColor(g);
+      var free = E.clonePosition(state.pos);
+      free.ko = -1;
+      if (E.check(free, c, state.hover) === '') view.setGhost(state.hover, c, false);
+      else view.setGhost(-1);
+      return;
+    }
     if (state.mode !== 'play' || g.status !== 'playing' || !controls(g.turn)) { view.setGhost(-1); return; }
     if (state.pending >= 0) { view.setGhost(state.pending, g.turn, true); return; }
     if (state.hover >= 0 && E.check(state.pos, g.turn, state.hover) === '') {
@@ -557,20 +637,20 @@
         }
         return;
       }
-      var mine = controls(g.turn);   // 語音與倒數只報給正在下這一手的人聽
+      // 讀秒語音與倒數：不管輪到誰，雙方的裝置都會報
       if (v.inByo) {
         var seen = byoAnnounced[g.turn];
         if (seen === undefined) {
           toast(side(g.turn) + '進入讀秒');
-          if (mine) Sound.say('byo');
-        } else if (mine && v.periods < seen) {
+          Sound.say('byo');
+        } else if (v.periods < seen) {
           if (v.periods === 1) Sound.say('last');
           else if (v.periods === 2) Sound.say('two');
         }
         byoAnnounced[g.turn] = v.periods;
       }
       var sec = Math.ceil(v.remaining / 1000);
-      if (mine && (v.inByo || !g.clock.periods) && sec >= 1 && sec <= 10) {
+      if ((v.inByo || !g.clock.periods) && sec >= 1 && sec <= 10) {
         var k = g.record.moves.length + ':' + v.periods + ':' + sec;
         if (k !== beepKey) {
           beepKey = k;
@@ -601,9 +681,13 @@
     render();
   }
 
-  /* seat：連線時老師執哪一色 */
-  function startPlay(record, startAt, turn, time, seat) {
+  /* seat：連線時老師執哪一色；rule：'territory' 比目法或 'area' 數子法 */
+  function startPlay(record, startAt, turn, time, seat, rule) {
     var game = M.create(record, startAt, turn, time, now());
+    game.rule = rule === 'area' ? 'area' : 'territory';
+    prefs.rule = game.rule;
+    savePrefs();
+    state.tool = 'alt';
     byoAnnounced = {};
     beepKey = '';
     if (online()) {
@@ -678,11 +762,18 @@
   });
 
   /* ---------- 新對局 ---------- */
+  /* 慣用貼目：比目法 6.5、數子法 7.5；讓子棋 0.5 */
+  var STD_KOMI = { territory: 6.5, area: 7.5 };
   var komiTouched = false;
+  function defaultKomi() {
+    if (komiTouched) return;
+    $('newKomi').value = $('newHandicap').value === '0' ? STD_KOMI[$('newRule').value] : 0.5;
+  }
+  $('newRule').value = prefs.rule;
+  defaultKomi();
   $('newKomi').addEventListener('input', function () { komiTouched = true; });
-  $('newHandicap').addEventListener('change', function () {
-    if (!komiTouched) $('newKomi').value = this.value === '0' ? '7.5' : '0.5';
-  });
+  $('newHandicap').addEventListener('change', defaultKomi);
+  $('newRule').addEventListener('change', defaultKomi);
   $('btnNew').addEventListener('click', function () {
     var komi = parseFloat($('newKomi').value);
     var record = G.newRecord({
@@ -691,7 +782,7 @@
       komi: isNaN(komi) ? undefined : komi
     });
     state.source = null;
-    startPlay(record, 0, record.first, newTime.read(), checkedValue('newSeat'));
+    startPlay(record, 0, record.first, newTime.read(), checkedValue('newSeat'), $('newRule').value);
   });
 
   /* ---------- 棋譜瀏覽 ---------- */
@@ -723,8 +814,14 @@
     var turn = G.naturalTurn(src, state.cursor);
     document.querySelector('input[name="startTurn"][value="' + turn + '"]').checked = true;
     $('startKomi').value = src.komi;
+    $('startRule').value = prefs.rule;
     startTime.show();
     $('dlgStart').showModal();
+  });
+  // 貼目是另一種規則的慣用值時，換規則就跟著換（自己填的其他數字不動）
+  $('startRule').addEventListener('change', function () {
+    var komi = parseFloat($('startKomi').value);
+    if (komi === STD_KOMI.territory || komi === STD_KOMI.area) $('startKomi').value = STD_KOMI[this.value];
   });
   $('startOk').addEventListener('click', function () {
     var record = G.cloneRecord(state.source);
@@ -735,7 +832,7 @@
     var turn = checkedValue('startTurn');
     var time = startTime.read();
     $('dlgStart').close();
-    startPlay(record, record.moves.length, turn, time, checkedValue('startSeat'));
+    startPlay(record, record.moves.length, turn, time, checkedValue('startSeat'), $('startRule').value);
   });
 
   /* ---------- 對弈 ---------- */
@@ -766,6 +863,18 @@
     var g = state.game;
     if (g.status === 'scoring') {
       act(function (x) { return M.toggleDead(x, idx); });
+      return;
+    }
+    if (g.status === 'demo') {
+      if (!canTeach()) return;
+      var tool = state.tool, color = STONE_TOOL[tool];
+      if (color === undefined) {
+        act(function (x) { return M.demoMark(x, idx, tool); });
+      } else {
+        act(function (x) { return M.demoPlay(x, color, idx); }).then(function (ok) {
+          if (!ok && state.pos && !state.pos.board[idx]) toast('這裡是禁著點，不能下');
+        });
+      }
       return;
     }
     if (g.status !== 'playing' || !controls(g.turn)) return;
@@ -834,6 +943,28 @@
         return true;
       });
     });
+  });
+
+  /* ---------- 老師擺棋講解 ---------- */
+  $('btnTeach').addEventListener('click', function () {
+    if (!canTeach()) return;
+    state.tool = 'alt';
+    act(function (x) { return M.startDemo(x, now()); });
+  });
+  $('teachBox').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-tool]');
+    if (!btn) return;
+    state.tool = btn.getAttribute('data-tool');
+    render();
+  });
+  $('btnTeachUndo').addEventListener('click', function () {
+    act(function (x) { return M.demoUndo(x); });
+  });
+  $('btnTeachClear').addEventListener('click', function () {
+    act(function (x) { return M.demoClear(x); });
+  });
+  $('btnTeachEnd').addEventListener('click', function () {
+    act(function (x) { return M.endDemo(x, now()); });
   });
 
   $('btnResume').addEventListener('click', function () {

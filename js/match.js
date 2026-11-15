@@ -3,7 +3,9 @@
  * game 是純資料（可存成 JSON），之後連線同步就是同步這個物件：
  *   {
  *     record, startAt, turn,
- *     status: 'playing' | 'scoring' | 'finished',
+ *     rule:   'territory'（比目法）或 'area'（數子法）,
+ *     status: 'playing' | 'scoring' | 'finished' | 'demo'（老師擺棋講解，對局暫停）,
+ *     demo:   null 或 { from:'playing'|'finished', moves:[{c,p}], marks:[{p,t}] },
  *     clock:  null（不計時）或 { main, byo, periods, left:{b:{main,periods}, w:{...}}, since },
  *     request: null 或 { type:'undo'|'count'|'draw', from },
  *     dead:   [數目時被標為死子的位置],
@@ -31,7 +33,9 @@
       dead: [],
       agree: { b: false, w: false },  // 數目時雙方是否已確認結果
       result: null,
-      teacherColor: 0                 // 連線對弈時老師執哪一色（單機為 0）
+      teacherColor: 0,                // 連線對弈時老師執哪一色（單機為 0）
+      rule: 'area',                   // 數目方式：'territory' 比目法、'area' 數子法
+      demo: null                      // 老師擺棋講解時的變化與標記
     };
     if (time) {
       var main = Math.max(0, time.main || 0);
@@ -195,7 +199,7 @@
     finish(game, { winner: 0, reason: 'draw' });
   }
 
-  /* ---------- 數目（中國規則數子法） ---------- */
+  /* ---------- 數目（比目法或數子法，看 game.rule） ---------- */
 
   function enterScoring(game, now) {
     if (game.status !== 'playing') return;
@@ -244,9 +248,18 @@
 
   /*
    * 計算勝負。
-   *   owner[i]：1 黑、2 白、3 雙方共有（各算半子）、0 不會出現
+   *   owner[i]：1 黑、2 白、3 雙方共有（數子法各算半子；比目法是單官，不算）
+   *   margin：正數黑勝、負數白勝（單位：目）
+   *
+   * 數子法（rule = 'area'）
    *   black / white：雙方的子數（活子 + 圍住的空點）
-   *   margin：正數黑勝、負數白勝（單位：目）= 黑子數 − 白子數 − 貼目 − 讓子貼還
+   *   margin = 黑子數 − 白子數 − 貼目 − 讓子貼還
+   *
+   * 比目法（rule = 'territory'）
+   *   terrB / terrW：圍住的空點（含對方死子所在的點）
+   *   capB / capW ：提子數（對局中提掉的 + 盤上的對方死子）
+   *   black / white：地 + 提子
+   *   margin = 黑 − 白 − 貼目
    */
   function score(game) {
     var pos = G.replay(game.record), size = pos.size, n = size * size, board = pos.board;
@@ -278,15 +291,44 @@
       for (k = 0; k < region.length; k++) owner[region[k]] = who;
     }
 
-    var black = 0, white = 0;
+    var komi = game.record.komi || 0, handicap = game.record.handicap || 0;
+    var black = 0, white = 0, margin;
+
+    if (game.rule === 'territory') {
+      var terrB = 0, terrW = 0, deadB = 0, deadW = 0;
+      for (i = 0; i < n; i++) {
+        if (dead[i]) { if (board[i] === BLACK) deadB += 1; else deadW += 1; }
+        if (alive(i)) continue;
+        if (owner[i] === BLACK) terrB += 1;
+        else if (owner[i] === WHITE) terrW += 1;
+      }
+      var capB = pos.caps[BLACK] + deadW, capW = pos.caps[WHITE] + deadB;
+      black = terrB + capB;
+      white = terrW + capW;
+      margin = black - white - komi;
+      return {
+        rule: 'territory',
+        owner: owner,
+        dead: dead,
+        terrB: terrB, terrW: terrW,
+        capB: capB, capW: capW,
+        black: black,
+        white: white,
+        komi: komi,
+        handicap: 0,
+        margin: margin,
+        winner: margin > 0 ? BLACK : (margin < 0 ? WHITE : 0)
+      };
+    }
+
     for (i = 0; i < n; i++) {
       if (owner[i] === BLACK) black += 1;
       else if (owner[i] === WHITE) white += 1;
       else { black += 0.5; white += 0.5; }
     }
-    var komi = game.record.komi || 0, handicap = game.record.handicap || 0;
-    var margin = black - white - komi - handicap;
+    margin = black - white - komi - handicap;
     return {
+      rule: 'area',
       owner: owner,
       dead: dead,
       black: black,
@@ -332,6 +374,108 @@
     return true;
   }
 
+  /* ---------- 老師擺棋講解：對局暫停，在棋盤上擺變化、加標記，結束後原局面不變 ---------- */
+
+  var MARK_SHAPES = { tri: true, sq: true, cir: true, x: true };
+  var MARK_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  /* 對局中或對局結束後都可以開始；對局中會先把時鐘停下來 */
+  function startDemo(game, now) {
+    if (game.status !== 'playing' && game.status !== 'finished') return false;
+    var from = game.status;
+    if (from === 'playing' && !stopClock(game, now)) return true;   // 剛好超時：對局已結束，照樣要存回去
+    game.status = 'demo';
+    game.request = null;
+    game.demo = { from: from, moves: [], marks: [] };
+    return true;
+  }
+
+  /*
+   * 擺棋時畫面上的局面：對局的局面再加上擺的變化。
+   * 回傳 { pos, board, numbers(變化的手數 1,2,3…), last }
+   */
+  function demoView(game) {
+    var pos = G.replay(game.record), numbers = new Uint16Array(pos.size * pos.size), last = -1;
+    var moves = game.demo ? game.demo.moves : [];
+    for (var i = 0; i < moves.length; i++) {
+      var r = E.place(pos, moves[i].c, moves[i].p, false);
+      if (!r.ok) continue;
+      for (var k = 0; k < r.captured.length; k++) numbers[r.captured[k]] = 0;
+      if (pos.board[moves[i].p]) numbers[moves[i].p] = i + 1;
+      last = moves[i].p;
+    }
+    return { pos: pos, board: pos.board, numbers: numbers, last: last };
+  }
+
+  /* 擺變化時「黑白輪流」的下一手是誰 */
+  function demoNextColor(game) {
+    var moves = game.demo ? game.demo.moves : [];
+    if (moves.length) return E.other(moves[moves.length - 1].c);
+    return game.turn;
+  }
+
+  /* 擺一顆變化的棋。color = 0 表示黑白輪流。會提子；已有棋子或禁著點不能下，打劫不限制。 */
+  function demoPlay(game, color, idx) {
+    if (game.status !== 'demo') return false;
+    var c = color === BLACK || color === WHITE ? color : demoNextColor(game);
+    var pos = demoView(game).pos;
+    pos.ko = -1;
+    if (E.check(pos, c, idx)) return false;
+    game.demo.moves.push({ c: c, p: idx });
+    return true;
+  }
+
+  function demoUndo(game) {
+    if (game.status !== 'demo' || !game.demo.moves.length) return false;
+    game.demo.moves.pop();
+    return true;
+  }
+
+  /*
+   * 在某一點加標記；那一點已經有標記就改成拿掉。
+   * type：'tri' 三角形、'sq' 方塊、'cir' 圓圈、'x' 叉、'letter' 字母（自動用還沒用過的 A、B、C…）
+   */
+  function demoMark(game, idx, type) {
+    if (game.status !== 'demo') return false;
+    var size = game.record.size;
+    if (!(idx >= 0 && idx < size * size)) return false;
+    var marks = game.demo.marks, i;
+    for (i = 0; i < marks.length; i++) {
+      if (marks[i].p === idx) { marks.splice(i, 1); return true; }
+    }
+    var t = type;
+    if (type === 'letter') {
+      var used = {};
+      for (i = 0; i < marks.length; i++) used[marks[i].t] = true;
+      t = '';
+      for (i = 0; i < MARK_LETTERS.length; i++) {
+        if (!used[MARK_LETTERS.charAt(i)]) { t = MARK_LETTERS.charAt(i); break; }
+      }
+      if (!t) return false;   // 26 個字母都用完了
+    } else if (!MARK_SHAPES[type]) {
+      return false;
+    }
+    marks.push({ p: idx, t: t });
+    return true;
+  }
+
+  function demoClear(game) {
+    if (game.status !== 'demo') return false;
+    game.demo.moves = [];
+    game.demo.marks = [];
+    return true;
+  }
+
+  /* 結束擺棋：變化與標記全部拿掉，回到原本的對局；對局中的話時鐘從現在繼續走 */
+  function endDemo(game, now) {
+    if (game.status !== 'demo') return false;
+    var from = game.demo && game.demo.from === 'finished' && game.result ? 'finished' : 'playing';
+    game.status = from;
+    game.demo = null;
+    if (from === 'playing' && game.clock) game.clock.since = now;
+    return true;
+  }
+
   /* ---------- 連線同步 ---------- */
 
   function toArray(v) {
@@ -374,6 +518,17 @@
     g.agree = { b: !!(g.agree && g.agree.b), w: !!(g.agree && g.agree.w) };
     g.result = g.result || null;
     g.teacherColor = g.teacherColor || 0;
+    g.rule = g.rule === 'territory' ? 'territory' : 'area';
+    if (g.status === 'demo') {
+      var d = g.demo || {};
+      g.demo = {
+        from: d.from === 'finished' ? 'finished' : 'playing',
+        moves: toArray(d.moves).map(function (m) { return { c: m.c, p: m.p }; }),
+        marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; })
+      };
+    } else {
+      g.demo = null;
+    }
     return g;
   }
 
@@ -396,6 +551,14 @@
     score: score,
     finishByScore: finishByScore,
     request: request,
-    respond: respond
+    respond: respond,
+    startDemo: startDemo,
+    demoView: demoView,
+    demoNextColor: demoNextColor,
+    demoPlay: demoPlay,
+    demoUndo: demoUndo,
+    demoMark: demoMark,
+    demoClear: demoClear,
+    endDemo: endDemo
   };
 })(window);

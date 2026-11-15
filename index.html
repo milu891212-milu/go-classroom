@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=2">
 </head>
 <body>
 
@@ -76,8 +76,14 @@
         <option value="9">讓 9 子</option>
       </select>
     </label>
+    <label class="field"><span>數目方式</span>
+      <select id="newRule">
+        <option value="territory">比目法（日本規則）</option>
+        <option value="area">數子法（中國規則）</option>
+      </select>
+    </label>
     <label class="field"><span>貼目</span>
-      <input type="number" id="newKomi" step="0.5" value="7.5">
+      <input type="number" id="newKomi" step="0.5" value="6.5">
     </label>
     <label class="field"><span>計時</span>
       <select id="newTime"></select>
@@ -183,7 +189,7 @@
       <div class="grid2" id="playButtons">
         <button class="btn" id="btnPass">停一手</button>
         <button class="btn" id="btnUndo">悔棋</button>
-        <button class="btn" id="btnCount">數子</button>
+        <button class="btn" id="btnCount">數目</button>
         <button class="btn" id="btnDraw">和棋</button>
         <button class="btn span2" id="btnResign">認輸</button>
         <button class="btn span2" id="btnForceUndo" hidden>老師退一手（不需同意）</button>
@@ -191,6 +197,30 @@
       <div class="box waiting" id="waitBox" hidden>
         <span id="waitText"></span>
         <button class="btn small" id="btnCancelRequest">收回</button>
+      </div>
+
+      <!-- 老師擺棋講解 -->
+      <button class="btn wide" id="btnTeach" hidden>暫停對局，擺棋講解</button>
+      <div class="box teach" id="teachBox" hidden>
+        <div class="teach-title">擺變化</div>
+        <div class="tools" id="teachTools">
+          <button class="btn small" data-tool="alt" title="黑白輪流擺">輪流</button>
+          <button class="btn small" data-tool="b" title="只擺黑子">黑</button>
+          <button class="btn small" data-tool="w" title="只擺白子">白</button>
+        </div>
+        <div class="teach-title">標記（再點一次取消）</div>
+        <div class="tools" id="teachMarks">
+          <button class="btn small" data-tool="tri" title="三角形">△</button>
+          <button class="btn small" data-tool="sq" title="方塊">□</button>
+          <button class="btn small" data-tool="cir" title="圓圈">○</button>
+          <button class="btn small" data-tool="x" title="叉">✕</button>
+          <button class="btn small" data-tool="letter" title="字母，依序 A、B、C…">ABC</button>
+        </div>
+        <div class="row">
+          <button class="btn small" id="btnTeachUndo">退一步</button>
+          <button class="btn small" id="btnTeachClear">全部清除</button>
+        </div>
+        <button class="btn primary wide" id="btnTeachEnd">結束擺棋，回到對局</button>
       </div>
 
       <div class="box" id="scoreBox" hidden>
@@ -224,6 +254,12 @@
       <label><input type="radio" name="startTurn" value="2"> 白</label>
     </div>
   </div>
+  <label class="field"><span>數目方式</span>
+    <select id="startRule">
+      <option value="territory">比目法（日本規則）</option>
+      <option value="area">數子法（中國規則）</option>
+    </select>
+  </label>
   <label class="field"><span>貼目</span>
     <input type="number" id="startKomi" step="0.5">
   </label>
@@ -282,14 +318,15 @@
 
 <div id="toast" role="status" aria-live="polite"></div>
 
-<script src="js/config.js"></script>
-<script src="js/engine.js"></script>
-<script src="js/sgf.js"></script>
-<script src="js/game.js"></script>
-<script src="js/match.js"></script>
-<script src="js/sound.js"></script>
-<script src="js/net.js"></script>
-<script src="js/board-view.js"></script>
-<script src="js/app.js"></script>
+<!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
+<script src="js/config.js?v=2"></script>
+<script src="js/engine.js?v=2"></script>
+<script src="js/sgf.js?v=2"></script>
+<script src="js/game.js?v=2"></script>
+<script src="js/match.js?v=2"></script>
+<script src="js/sound.js?v=2"></script>
+<script src="js/net.js?v=2"></script>
+<script src="js/board-view.js?v=2"></script>
+<script src="js/app.js?v=2"></script>
 </body>
 </html>

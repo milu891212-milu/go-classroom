@@ -210,6 +210,8 @@
     resumePlay: function (g, now) { return M0.resumePlay(g, now + T0); },
     respond: function (g, a, now) { return M0.respond(g, a, now + T0); },
     forceUndo: function (g, now) { return M0.forceUndo(g, now + T0); },
+    startDemo: function (g, now) { return M0.startDemo(g, now + T0); },
+    endDemo: function (g, now) { return M0.endDemo(g, now + T0); },
     canUndo: M0.canUndo, toggleDead: M0.toggleDead, score: M0.score,
     finishByScore: M0.finishByScore, request: M0.request,
     agree: M0.agree, cancelRequest: M0.cancelRequest, normalize: M0.normalize
@@ -462,6 +464,105 @@
     M.play(g, 0, 0); M.play(g, 1, 0);
     eq(M.forceUndo(g, 0), true); eq(g.record.moves.length, 3); eq(g.turn, W);
     eq(M.forceUndo(g, 0), true); eq(M.forceUndo(g, 0), false); eq(g.record.moves.length, 2); eq(g.turn, B);
+  });
+
+  /* ---------- 比目法 ---------- */
+  test('比目法：地加上提子，死子算提子，單官不算', function () {
+    var rec = recordFrom(['. X O . .', '. X O . .', 'O X O . .', 'O X O . .', '. X O . .'], 0);
+    var g = M.create(rec, 0, B, null, 0);
+    g.rule = 'territory';
+    M.enterScoring(g, 0);
+    var before = M.score(g);
+    eq([before.terrB, before.terrW, before.black, before.white], [0, 10, 0, 10], '左邊黑白都碰得到，是單官');
+    M.toggleDead(g, 10);
+    var s = M.score(g);
+    eq([s.terrB, s.capB, s.black], [5, 2, 7], '死子所在的點算地，死子本身算提子');
+    eq([s.terrW, s.capW, s.white], [10, 0, 10]);
+    eq(s.margin, -3); eq(s.winner, W); eq(s.rule, 'territory');
+    eq(M.normalize(throughDatabase(g)).rule, 'territory');
+  });
+
+  test('比目法：對局中提掉的子算進去，貼目照扣', function () {
+    var rec = recordFrom(['O X . . .', '. . . . .', '. . . . .', '. . . . .', '. . . . .'], 0.5);
+    var g = M.create(rec, 0, B, null, 0);
+    g.rule = 'territory';
+    eq(M.play(g, 5, 0).ok, true);          // 黑提掉角上的白子
+    M.enterScoring(g, 0);
+    var s = M.score(g);
+    eq([s.terrB, s.capB, s.black, s.white], [23, 1, 24, 0]);
+    eq(s.margin, 23.5);
+    M.finishByScore(g);
+    eq(g.result.text, '黑勝 23.5 目'); eq(g.result.sgf, 'B+23.5');
+  });
+
+  test('沒有指定數目方式的舊對局，當成數子法', function () {
+    var g = fresh(null);
+    delete g.rule;
+    eq(M.normalize(throughDatabase(g)).rule, 'area');
+  });
+
+  /* ---------- 老師擺棋講解 ---------- */
+  test('擺棋講解：對局暫停、變化不進棋譜、結束後時鐘繼續', function () {
+    var g = fresh({ main: 60, byo: 0, periods: 0 });
+    M.play(g, 40, 5000);                    // 黑用了 5 秒
+    eq(M.startDemo(g, 8000), true);         // 白想了 3 秒時老師暫停
+    eq(g.status, 'demo'); eq(g.clock.since, 0);
+    eq(M.timeView(g, W, 500000).remaining, 57000, '暫停中時間不走');
+    eq(M0.demoPlay(g, 0, 41), true); eq(M0.demoPlay(g, 0, 42), true);
+    eq(g.demo.moves, [{ c: W, p: 41 }, { c: B, p: 42 }], '黑白輪流，從輪到的一方開始');
+    eq(M0.demoPlay(g, 0, 41), false, '已有棋子的點不能擺');
+    eq(M0.demoPlay(g, B, 43), true, '也可以指定顏色');
+    eq(g.record.moves.length, 1, '棋譜不變');
+    var v = M0.demoView(g);
+    eq([v.board[41], v.board[42], v.numbers[41], v.numbers[43], v.last], [W, B, 1, 3, 43]);
+    eq(M.play(g, 44, 9000).ok, false, '擺棋時不能下正式的著手');
+    M0.demoUndo(g); eq(g.demo.moves.length, 2);
+    eq(M.endDemo(g, 600000), true);
+    eq(g.status, 'playing'); eq(g.demo, null); eq(g.turn, W);
+    eq(M.timeView(g, W, 601000).remaining, 56000, '回到對局後從現在繼續計時');
+    eq(G.replay(g.record).board[41], 0, '變化的棋子不留在盤上');
+  });
+
+  test('擺棋講解：變化裡可以提子', function () {
+    var rec = recordFrom(['O X . . .', '. . . . .', '. . . . .', '. . . . .', '. . . . .'], 0);
+    var g = M.create(rec, 0, B, null, 0);
+    M.startDemo(g, 0);
+    eq(M0.demoPlay(g, B, 5), true);
+    var v = M0.demoView(g);
+    eq([v.board[0], v.board[5], v.numbers[5]], [0, B, 1]);
+    eq(M0.demoPlay(g, W, 0), false, '禁著點不能擺');
+  });
+
+  test('擺棋講解：標記可加可取消，字母依序使用', function () {
+    var g = fresh(null);
+    M.startDemo(g, 0);
+    M0.demoMark(g, 10, 'tri'); M0.demoMark(g, 11, 'letter'); M0.demoMark(g, 12, 'letter');
+    eq(g.demo.marks, [{ p: 10, t: 'tri' }, { p: 11, t: 'A' }, { p: 12, t: 'B' }]);
+    M0.demoMark(g, 11, 'sq');
+    eq(g.demo.marks.length, 2, '已有標記的點再點一次是取消');
+    M0.demoMark(g, 13, 'letter');
+    eq(g.demo.marks[2], { p: 13, t: 'A' }, 'A 空出來了就先用 A');
+    eq(M0.demoMark(g, 14, 'bogus'), false);
+    eq(M0.demoMark(g, 999, 'tri'), false);
+    M0.demoClear(g);
+    eq([g.demo.moves.length, g.demo.marks.length], [0, 0]);
+  });
+
+  test('擺棋講解：對局結束後也能擺；數目中不行；經過資料庫後內容一致', function () {
+    var g = fresh(null);
+    M.play(g, 40, 0);
+    M.enterScoring(g, 0);
+    eq(M.startDemo(g, 0), false, '數目中不能擺棋');
+    M.resumePlay(g, 0);
+    M.resign(g, W, 0);
+    eq(M.startDemo(g, 0), true); eq(g.demo.from, 'finished');
+    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', moves: [], marks: [] }, '空的變化與標記會補回來');
+    M0.demoPlay(g, 0, 41); M0.demoMark(g, 41, 'tri');
+    var back = M.normalize(throughDatabase(g));
+    eq(back.demo, g.demo); eq(back.status, 'demo');
+    M.endDemo(g, 0);
+    eq(g.status, 'finished'); eq(g.result.sgf, 'B+R');
+    eq(M.normalize(throughDatabase(g)).demo, null);
   });
 
   var pass = results.filter(function (r) { return r.ok; }).length;
