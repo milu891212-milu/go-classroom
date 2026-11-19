@@ -259,13 +259,13 @@
     eq(M.timeView(g, W, 50000).remaining, 40000);
   });
 
-  test('讀秒：時間內下完不扣次數，超過一次扣一次（含 1 秒壓秒緩衝）', function () {
+  test('讀秒：時間內下完不扣次數，超過一次扣一次（含 0.5 秒壓秒緩衝）', function () {
     var g = fresh({ main: 60, byo: 10, periods: 2 });
     eq(M.timeView(g, B, 65000), { inByo: true, remaining: 5000, periods: 2, out: false });
-    eq(M.timeView(g, B, 70500), { inByo: true, remaining: 0, periods: 2, out: false }, '顯示到 0 之後 1 秒內還沒扣');
-    eq(M.timeView(g, B, 72000), { inByo: true, remaining: 9000, periods: 1, out: false }, '超過緩衝才扣，下一次從頭算');
-    eq(M.timeView(g, B, 81999).out, false);
-    eq(M.timeView(g, B, 82000).out, true, '兩次讀秒（各含緩衝）用完');
+    eq(M.timeView(g, B, 70400), { inByo: true, remaining: 0, periods: 2, out: false }, '顯示到 0 之後 0.5 秒內還沒扣');
+    eq(M.timeView(g, B, 71500), { inByo: true, remaining: 9000, periods: 1, out: false }, '超過緩衝才扣，下一次從頭算');
+    eq(M.timeView(g, B, 80999).out, false);
+    eq(M.timeView(g, B, 81000).out, true, '兩次讀秒（各含緩衝）用完');
     M.play(g, 40, 65000);
     eq(g.clock.left.b, { main: 0, periods: 2 }, '第一次讀秒內下完');
     M.play(g, 41, 66000);
@@ -278,14 +278,14 @@
     var g = fresh({ main: 0, byo: 30, periods: 3 });
     M.play(g, 40, 30400);                     // 30 秒讀秒，0.4 秒後才點到
     eq(g.clock.left.b, { main: 0, periods: 3 }, '沒有扣');
-    M.play(g, 41, 30400 + 31200);             // 白方超過緩衝 0.2 秒
+    M.play(g, 41, 30400 + 30700);             // 白方超過緩衝 0.2 秒
     eq(g.clock.left.w.periods, 2, '超過緩衝就扣');
   });
 
   test('超時判負', function () {
     var g = fresh({ main: 60, byo: 10, periods: 2 });
-    eq(M.checkTimeout(g, 81999), false);
-    eq(M.checkTimeout(g, 82000), true);
+    eq(M.checkTimeout(g, 80999), false);
+    eq(M.checkTimeout(g, 81000), true);
     eq(g.status, 'finished'); eq(g.result.winner, W); eq(g.result.sgf, 'W+T'); eq(g.result.text, '白勝（黑方超時）');
     eq(M.play(g, 40, 90000).ok, false, '結束後不能再下');
   });
@@ -293,8 +293,8 @@
   test('沒有讀秒：基本時間用完就超時', function () {
     var g = fresh({ main: 30, byo: 0, periods: 0 });
     eq(M.timeView(g, B, 29000).out, false);
-    eq(M.timeView(g, B, 30500), { inByo: false, remaining: 0, periods: 0, out: false }, '壓秒緩衝');
-    eq(M.timeView(g, B, 31000).out, true);
+    eq(M.timeView(g, B, 30400), { inByo: false, remaining: 0, periods: 0, out: false }, '壓秒緩衝');
+    eq(M.timeView(g, B, 30500).out, true);
   });
 
   test('超時後才點棋盤：判負而不是落子', function () {
@@ -594,6 +594,20 @@
     eq(back.demo.who, 'turns', '經過資料庫後設定還在');
     var old = throughDatabase(g); delete old.demo.who;
     eq(M.normalize(old).demo.who, 'teacher', '舊資料沒有這個欄位時當成只有老師');
+  });
+
+  test('擺棋講解：連線時一人一手由學生先擺', function () {
+    var g = fresh(null);
+    g.teacherColor = W;                          // 老師執白、學生執黑
+    M.play(g, 40, 0);                            // 黑下了一手，對局輪到白（老師）
+    M.startDemo(g, 0);
+    eq(M0.demoNextColor(g), W, '老師控制時照對局的順序');
+    M0.demoSetWho(g, 'turns');
+    eq(M0.demoNextColor(g), B, '一人一手：第一手是學生的顏色');
+    M0.demoPlay(g, 0, 41);
+    eq([g.demo.moves[0].c, M0.demoNextColor(g)], [B, W], '接著換老師');
+    M0.demoClear(g);
+    eq(M0.demoNextColor(g), B, '結束試下後重新開始，又是學生先');
   });
 
   test('擺棋講解：一次退／進很多手，走到底為止', function () {

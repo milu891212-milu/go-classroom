@@ -64,7 +64,7 @@
    * 壓秒緩衝（毫秒）：時間顯示到 0 之後，再過這麼久才真的扣一次讀秒（或超時）。
    * 倒數到最後一秒才落子時，網路與手指的延遲不會害人多扣一次。
    */
-  var GRACE = 1000;
+  var GRACE = 500;
 
   /*
    * 某一方此刻的時間。回傳 null（不計時）或
@@ -445,10 +445,11 @@
     return { pos: pos, board: pos.board, numbers: numbers, last: last, base: base, total: game.record.moves.length };
   }
 
-  /* 擺變化時「黑白輪流」的下一手是誰 */
+  /* 擺變化時「黑白輪流」的下一手是誰。一人一手時，變化的第一手由學生（學生的顏色）先擺。 */
   function demoNextColor(game) {
     var moves = game.demo ? game.demo.moves : [];
     if (moves.length) return E.other(moves[moves.length - 1].c);
+    if (game.demo && game.demo.who === 'turns' && game.teacherColor) return E.other(game.teacherColor);
     var base = demoBase(game);
     return base >= game.record.moves.length ? game.turn : G.naturalTurn(game.record, base);
   }

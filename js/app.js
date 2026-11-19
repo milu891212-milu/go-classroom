@@ -295,9 +295,9 @@
   }
 
   var WHO_TOAST = {
-    teacher: '老師收回擺棋，只有老師能擺',
+    teacher: '回到老師控制，只有老師能擺',
     free: '老師開放學生一起擺變化',
-    turns: '老師一手、學生一手，輪流擺'
+    turns: '一人一手：學生先擺，之後輪流'
   };
 
   /* 比對前後狀態，發出對應的音效與提示（自己或對方的動作都走這裡） */
@@ -541,10 +541,10 @@
       if (!online()) sub = '在棋盤上擺變化或加標記';
       else if (teach) {
         sub = who === 'free' ? '學生也可以擺變化、加標記'
-          : who === 'turns' ? '老師一手、學生一手輪流擺' : '在棋盤上擺變化或加標記，學生會同步看到';
+          : who === 'turns' ? '一人一手：學生先擺，之後輪流' : '在棋盤上擺變化或加標記，學生會同步看到';
       } else {
         sub = who === 'free' ? '老師開放你一起擺變化、加標記'
-          : who === 'turns' ? '老師一手、你一手，輪流擺' : '請看棋盤';
+          : who === 'turns' ? '一人一手：你先擺，之後和老師輪流' : '請看棋盤';
       }
       setStatus(online() && !teach ? '老師擺棋講解中' : '擺棋講解中',
         (g.demo.from === 'playing' ? '對局暫停，時間不會走。' : '') + sub);
@@ -1090,8 +1090,9 @@
   $('teachWho').addEventListener('click', function (ev) {
     var btn = ev.target.closest('[data-who]');
     if (!btn || !canTeach()) return;
-    var who = btn.getAttribute('data-who');
-    act(function (x) { return M.demoSetWho(x, who); });
+    var pick = btn.getAttribute('data-who');
+    // 按已經選的那一個就是取消，回到老師控制
+    act(function (x) { return M.demoSetWho(x, x.demo && x.demo.who === pick ? 'teacher' : pick); });
   });
   $('btnTeachEnd').addEventListener('click', function () {
     act(function (x) { return M.endDemo(x, now()); });

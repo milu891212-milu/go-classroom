@@ -194,8 +194,8 @@ body.dragging .drop { border-color: var(--accent); background: var(--accent-soft
 .teach-title { font-size: 13px; color: var(--muted); }
 .tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); gap: 6px; }
 .tools .btn { padding: 4px 6px; }
-.tools.three { grid-template-columns: repeat(3, 1fr); }
-.tools.three .btn { font-size: 13px; white-space: nowrap; }
+.tools.pair { grid-template-columns: repeat(2, 1fr); }
+.tools.pair .btn { white-space: nowrap; }
 #teachTurn { color: var(--accent); font-weight: 700; font-size: 15px; }
 .btn.on, .btn.on:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
 #board.teaching { cursor: crosshair; }
