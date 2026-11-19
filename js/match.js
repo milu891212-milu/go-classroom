@@ -421,10 +421,15 @@
     return true;
   }
 
+  /* 擺棋時最多退回到哪一手：開始下的那一手（例如從棋譜第 75 手開始下，就是 75） */
+  function demoFloor(game) {
+    return Math.max(0, Math.min(game.startAt || 0, game.record.moves.length));
+  }
+
   function demoBase(game) {
     var total = game.record.moves.length, d = game.demo;
     if (!d || typeof d.base !== 'number') return total;
-    return Math.max(0, Math.min(total, d.base));
+    return Math.max(demoFloor(game), Math.min(total, d.base));
   }
 
   /*
@@ -465,7 +470,7 @@
     return true;
   }
 
-  /* 上一手：先收回擺的變化；變化都收完了，就往回退對局的著手 */
+  /* 上一手：先收回擺的變化；變化都收完了，就往回退對局的著手（最多退到開始下的那一手） */
   function demoBack(game) {
     if (game.status !== 'demo') return false;
     var d = game.demo;
@@ -474,7 +479,7 @@
       return true;
     }
     var base = demoBase(game);
-    if (base <= 0) return false;
+    if (base <= demoFloor(game)) return false;
     d.base = base - 1;
     d.undone = [];
     return true;
@@ -545,19 +550,14 @@
     return true;
   }
 
-  /*
-   * 回到開始對弈時的局面（例如從棋譜第 75 手開始下，就回到第 75 手）。
-   * 已經在那個局面、沒有變化時再按一次，才退到最開頭。標記保留。
-   */
+  /* 回到開始對弈時的局面（例如從棋譜第 75 手開始下，就回到第 75 手）。變化拿掉，標記保留。 */
   function demoToStart(game) {
     if (game.status !== 'demo') return false;
-    var d = game.demo, base = demoBase(game);
-    var start = Math.min(game.startAt || 0, game.record.moves.length);
-    var target = (d.moves.length || base > start) ? start : 0;
-    if (!d.moves.length && !d.undone.length && base === target) return false;
+    var d = game.demo, floor = demoFloor(game);
+    if (!d.moves.length && !d.undone.length && demoBase(game) === floor) return false;
     d.moves = [];
     d.undone = [];
-    d.base = target;
+    d.base = floor;
     return true;
   }
 
@@ -659,6 +659,7 @@
     demoForward: demoForward,
     demoStep: demoStep,
     demoToStart: demoToStart,
+    demoFloor: demoFloor,
     demoSetWho: demoSetWho,
     demoMark: demoMark,
     demoClear: demoClear,

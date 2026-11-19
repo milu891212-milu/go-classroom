@@ -538,13 +538,13 @@
   });
 
   test('擺棋講解：可以往回退對局的著手，從之前的局面擺變化', function () {
-    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 3, W, null, 0);
+    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 0, W, null, 0);   // 從頭開始下的對局
     M.play(g, 0, 0);                              // 白 A9，現在共 4 手，輪到黑
     M.startDemo(g, 0);
     eq(g.demo.base, 4);
     eq(M0.demoForward(g), false, '已經在最後，不能再往前');
     M0.demoBack(g); M0.demoBack(g);
-    eq(g.demo.base, 2, '沒有變化時，上一手是退對局的著手（棋譜原有的也能退）');
+    eq(g.demo.base, 2, '沒有變化時，上一手是退對局的著手');
     var v = M0.demoView(g);
     eq([v.board[0], v.board[60], v.board[20], v.base, v.total], [0, 0, W, 2, 4]);
     eq(M0.demoNextColor(g), B, '退回去之後，輪流擺的第一手是當時該下的一方');
@@ -566,17 +566,20 @@
     eq([g.record.moves.length, g.turn, g.status], [4, B, 'playing'], '對局本身完全沒變');
   });
 
-  test('擺棋講解：|◀ 先回到開始下的那一手，再按一次才到最開頭', function () {
+  test('擺棋講解：從棋譜中途開始下的，最多只能退到開始下的那一手', function () {
     var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 3, W, null, 0);
-    M.play(g, 0, 0); M.play(g, 1, 0);           // 開始下之後又下了 2 手，共 5 手
+    M.play(g, 0, 0); M.play(g, 1, 0);           // 從第 3 手開始下，又下了 2 手，共 5 手
     M.startDemo(g, 0);
+    eq(M0.demoFloor(g), 3);
     M0.demoPlay(g, 0, 40);
     eq(M0.demoToStart(g), true);
-    eq([g.demo.base, g.demo.moves.length], [3, 0], '回到第 3 手（開始下的局面），變化拿掉');
-    eq(M0.demoToStart(g), true); eq(g.demo.base, 0, '再按一次到最開頭');
-    eq(M0.demoToStart(g), false, '已經在最開頭');
-    M0.demoStep(g, 2);
-    eq(M0.demoToStart(g), true); eq(g.demo.base, 0, '在開始下之前的位置按，就到最開頭');
+    eq([g.demo.base, g.demo.moves.length], [3, 0], '|◀ 回到第 3 手（開始下的局面），變化拿掉');
+    eq(M0.demoToStart(g), false, '再按也不會退到更前面');
+    eq(M0.demoBack(g), false, '◀ 也退不過去');
+    M0.demoStep(g, 100000); eq(g.demo.base, 5);
+    eq(M0.demoStep(g, -10), true); eq(g.demo.base, 3, '◀◀ 退 10 手也停在第 3 手');
+    M0.demoPlay(g, 0, 41); M0.demoBack(g);
+    eq([g.demo.base, g.demo.undone.length], [3, 1], '在第 3 手擺的變化照樣可以收回');
   });
 
   test('擺棋講解：學生擺棋的設定（學生控制／持黑／持白）', function () {
@@ -596,7 +599,7 @@
   });
 
   test('擺棋講解：輪流擺時，下一手看盤上最後一手是誰下的', function () {
-    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 3, W, null, 0);
+    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 0, W, null, 0);
     M.startDemo(g, 0);
     M0.demoSetWho(g, 'white');
     eq(M0.demoNextColor(g), W, '最後一手是黑，換白');
@@ -611,7 +614,7 @@
   });
 
   test('擺棋講解：一次退／進很多手，走到底為止', function () {
-    var g = M.create(S.load('(;SZ[9];B[aa];W[ba];B[ca];W[da];B[ea];W[fa];B[ga];W[ha];B[ia];W[ab];B[bb];W[cb])'), 12, B, null, 0);
+    var g = M.create(S.load('(;SZ[9];B[aa];W[ba];B[ca];W[da];B[ea];W[fa];B[ga];W[ha];B[ia];W[ab];B[bb];W[cb])'), 0, B, null, 0);
     M.startDemo(g, 0);
     M0.demoPlay(g, 0, 40); M0.demoPlay(g, 0, 41);
     eq(M0.demoStep(g, -10), true);

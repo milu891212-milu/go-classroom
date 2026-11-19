@@ -579,6 +579,8 @@
     $('scoreHint').hidden = !scoring;
     $('scoreButtons').hidden = !scoring;
     $('btnEnd').hidden = online() && !isTeacher();
+    // 匯出 SGF 只在對局結束後（覆盤時）出現，下棋中不需要
+    $('btnExport').hidden = !(finished || (demo && g.demo.from === 'finished'));
     $('btnEnd').textContent = state.source || g.startAt > 0 ? '結束對局，回到棋譜' : '結束對局';
 
     // 老師擺棋講解
@@ -594,8 +596,8 @@
       Array.prototype.forEach.call($('teachWho').querySelectorAll('[data-who]'), function (b) {
         b.classList.toggle('on', b.getAttribute('data-who') === g.demo.who);
       });
-      var dm = g.demo, atEnd = dv.base >= dv.total, start = Math.min(g.startAt, dv.total);
-      var noBack = !dm.moves.length && dv.base <= 0;
+      var dm = g.demo, atEnd = dv.base >= dv.total, start = M.demoFloor(g);
+      var noBack = !dm.moves.length && dv.base <= start;   // 最多退到開始下的那一手
       var noFwd = !dm.undone.length && (dm.moves.length > 0 || atEnd);
       Array.prototype.forEach.call($('teachNav').querySelectorAll('[data-step]'), function (b) {
         var s = b.getAttribute('data-step');
@@ -1159,8 +1161,10 @@
       else goHome();
     };
     if (!hasNewMoves() && !(online() && state.game.status !== 'finished')) { back(); return; }
+    var over = state.game.status === 'finished' || (state.game.demo && state.game.demo.from === 'finished');
     var text = (online() ? '學生的畫面也會一起結束。' : '') +
-      '還沒匯出的著手不會保留。需要留存的話，請先按「匯出 SGF」。';
+      (over ? '還沒匯出的著手不會保留。需要留存的話，請先按「匯出 SGF」。'
+        : '這盤棋還沒下完，結束後不會保留。');
     ask('結束這盤對局？', text, '結束對局').then(function (ok) { if (ok) back(); });
   }
   $('btnEnd').addEventListener('click', function () { leavePlay(false); });
