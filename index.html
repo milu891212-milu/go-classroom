@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=9">
+<link rel="stylesheet" href="css/style.css?v=10">
 </head>
 <body>
 
@@ -203,7 +203,7 @@
       <button class="btn wide" id="btnTeach" hidden>暫停對局，擺棋講解</button>
       <div class="box teach" id="teachBox" hidden>
         <div class="nav" id="teachNav">
-          <button class="btn" data-step="first" title="退到開頭" aria-label="退到開頭">|◀</button>
+          <button class="btn" data-step="first" title="回到開始下的局面（再按一次到最開頭）" aria-label="回到開始下的局面">|◀</button>
           <button class="btn fast" data-step="-10" title="退 10 手" aria-label="退 10 手">◀◀</button>
           <button class="btn" data-step="-1" title="上一手（鍵盤 ←）" aria-label="上一手">◀</button>
           <button class="btn" data-step="1" title="下一手（鍵盤 →）" aria-label="下一手">▶</button>
@@ -211,21 +211,34 @@
           <button class="btn" data-step="last" title="進到最後" aria-label="進到最後">▶|</button>
         </div>
         <div class="teach-title" id="teachWhere"></div>
-        <div class="teach-title">擺變化</div>
-        <div class="tools" id="teachTools">
-          <button class="btn small" data-tool="alt" title="黑白輪流擺">輪流</button>
-          <button class="btn small" data-tool="b" title="只擺黑子">黑</button>
-          <button class="btn small" data-tool="w" title="只擺白子">白</button>
+        <button class="btn wide" id="btnTeachClear" title="拿掉剛才擺的變化與標記">結束試下</button>
+        <div id="teachStoneBox">
+          <div class="teach-title">擺變化</div>
+          <div class="tools" id="teachTools">
+            <button class="btn small" data-tool="alt" title="黑白輪流擺">輪流</button>
+            <button class="btn small" data-tool="b" title="只擺黑子">黑</button>
+            <button class="btn small" data-tool="w" title="只擺白子">白</button>
+          </div>
         </div>
-        <div class="teach-title">標記（再點一次取消）</div>
-        <div class="tools" id="teachMarks">
-          <button class="btn small" data-tool="tri" title="三角形">△</button>
-          <button class="btn small" data-tool="sq" title="方塊">□</button>
-          <button class="btn small" data-tool="cir" title="圓圈">○</button>
-          <button class="btn small" data-tool="x" title="叉">✕</button>
-          <button class="btn small" data-tool="letter" title="字母，依序 A、B、C…">ABC</button>
+        <div id="teachMarkBox">
+          <div class="teach-title">標記（再點一次取消）</div>
+          <div class="tools" id="teachMarks">
+            <button class="btn small" data-tool="tri" title="三角形">△</button>
+            <button class="btn small" data-tool="sq" title="方塊">□</button>
+            <button class="btn small" data-tool="cir" title="圓圈">○</button>
+            <button class="btn small" data-tool="x" title="叉">✕</button>
+            <button class="btn small" data-tool="letter" title="字母，依序 A、B、C…">ABC</button>
+          </div>
         </div>
-        <button class="btn small wide" id="btnTeachClear">全部清除，回到暫停時的局面</button>
+        <div id="teachWhoBox">
+          <div class="teach-title">學生擺棋</div>
+          <div class="tools three" id="teachWho">
+            <button class="btn small" data-who="teacher" title="只有老師能擺">只有老師</button>
+            <button class="btn small" data-who="free" title="學生也可以擺變化、加標記">學生也可擺</button>
+            <button class="btn small" data-who="turns" title="老師擺一手、學生擺一手">一人一手</button>
+          </div>
+        </div>
+        <div class="teach-title" id="teachTurn" hidden></div>
         <button class="btn primary wide" id="btnTeachEnd">結束擺棋，回到對局</button>
       </div>
 
@@ -325,14 +338,14 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=9"></script>
-<script src="js/engine.js?v=9"></script>
-<script src="js/sgf.js?v=9"></script>
-<script src="js/game.js?v=9"></script>
-<script src="js/match.js?v=9"></script>
-<script src="js/sound.js?v=9"></script>
-<script src="js/net.js?v=9"></script>
-<script src="js/board-view.js?v=9"></script>
-<script src="js/app.js?v=9"></script>
+<script src="js/config.js?v=10"></script>
+<script src="js/engine.js?v=10"></script>
+<script src="js/sgf.js?v=10"></script>
+<script src="js/game.js?v=10"></script>
+<script src="js/match.js?v=10"></script>
+<script src="js/sound.js?v=10"></script>
+<script src="js/net.js?v=10"></script>
+<script src="js/board-view.js?v=10"></script>
+<script src="js/app.js?v=10"></script>
 </body>
 </html>

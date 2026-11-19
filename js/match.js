@@ -5,7 +5,8 @@
  *     record, startAt, turn,
  *     rule:   'territory'（比目法）或 'area'（數子法）,
  *     status: 'playing' | 'scoring' | 'finished' | 'demo'（老師擺棋講解，對局暫停）,
- *     demo:   null 或 { from:'playing'|'finished', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}] },
+ *     demo:   null 或 { from:'playing'|'finished', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}],
+ *                       who:'teacher'|'free'|'turns' },
  *     clock:  null（不計時）或 { main, byo, periods, left:{b:{main,periods}, w:{...}}, since },
  *     request: null 或 { type:'undo'|'count'|'draw', from },
  *     dead:   [數目時被標為死子的位置],
@@ -60,8 +61,14 @@
   /* ---------- 計時 ---------- */
 
   /*
+   * 壓秒緩衝（毫秒）：時間顯示到 0 之後，再過這麼久才真的扣一次讀秒（或超時）。
+   * 倒數到最後一秒才落子時，網路與手指的延遲不會害人多扣一次。
+   */
+  var GRACE = 1000;
+
+  /*
    * 某一方此刻的時間。回傳 null（不計時）或
-   *   { inByo, remaining(毫秒), periods(剩餘讀秒次數), out(是否超時) }
+   *   { inByo, remaining(毫秒，壓秒緩衝期間是 0), periods(剩餘讀秒次數), out(是否超時) }
    */
   function timeView(game, color, now) {
     var c = game.clock;
@@ -75,14 +82,22 @@
     }
     var byoMs = c.byo * 1000;
     if (left.periods <= 0 || byoMs <= 0) {
-      return { inByo: false, remaining: 0, periods: 0, out: true };
+      // 沒有讀秒：基本時間到 0 之後，壓秒緩衝內落子仍然算數
+      return { inByo: false, remaining: 0, periods: 0, out: elapsed >= left.main + GRACE };
     }
+    // 每一次讀秒實際長度 = 讀秒秒數 + 壓秒緩衝；緩衝的那一段畫面停在 0
+    var span = byoMs + GRACE;
     var over = elapsed - left.main;
-    var used = Math.floor(over / byoMs);
+    var used = Math.floor(over / span);
     if (used >= left.periods) {
       return { inByo: true, remaining: 0, periods: 0, out: true };
     }
-    return { inByo: true, remaining: byoMs - (over % byoMs), periods: left.periods - used, out: false };
+    return {
+      inByo: true,
+      remaining: Math.max(0, byoMs - (over - used * span)),
+      periods: left.periods - used,
+      out: false
+    };
   }
 
   /* 把輪到的一方用掉的時間結算進去。超時會直接判負並回傳 false。 */
@@ -391,8 +406,18 @@
       base: game.record.moves.length,   // 目前退到對局的第幾步（可以往回退，從之前的局面擺變化）
       moves: [],                        // 擺的變化
       undone: [],                       // 被「上一手」收回的變化，「下一手」可以再擺回來
-      marks: []
+      marks: [],
+      who: 'teacher'                    // 誰可以擺：'teacher' 只有老師、'free' 學生也可以、'turns' 老師一手學生一手
     };
+    return true;
+  }
+
+  var DEMO_WHO = { teacher: true, free: true, turns: true };
+
+  /* 老師設定學生能不能擺棋 */
+  function demoSetWho(game, who) {
+    if (game.status !== 'demo' || !DEMO_WHO[who] || game.demo.who === who) return false;
+    game.demo.who = who;
     return true;
   }
 
@@ -509,13 +534,30 @@
     return true;
   }
 
-  /* 全部清除：變化與標記都拿掉，局面回到暫停當時 */
+  /* 結束試下：剛才擺的變化與標記全部拿掉，回到開始擺變化之前的那個局面（對局的著手停在原處） */
   function demoClear(game) {
     if (game.status !== 'demo') return false;
-    game.demo.base = game.record.moves.length;
-    game.demo.moves = [];
-    game.demo.undone = [];
-    game.demo.marks = [];
+    var d = game.demo;
+    if (!d.moves.length && !d.undone.length && !d.marks.length) return false;
+    d.moves = [];
+    d.undone = [];
+    d.marks = [];
+    return true;
+  }
+
+  /*
+   * 回到開始對弈時的局面（例如從棋譜第 75 手開始下，就回到第 75 手）。
+   * 已經在那個局面、沒有變化時再按一次，才退到最開頭。標記保留。
+   */
+  function demoToStart(game) {
+    if (game.status !== 'demo') return false;
+    var d = game.demo, base = demoBase(game);
+    var start = Math.min(game.startAt || 0, game.record.moves.length);
+    var target = (d.moves.length || base > start) ? start : 0;
+    if (!d.moves.length && !d.undone.length && base === target) return false;
+    d.moves = [];
+    d.undone = [];
+    d.base = target;
     return true;
   }
 
@@ -580,7 +622,8 @@
         base: typeof d.base === 'number' ? Math.max(0, Math.min(r.moves.length, d.base)) : r.moves.length,
         moves: toArray(d.moves).map(stone),
         undone: toArray(d.undone).map(stone),
-        marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; })
+        marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; }),
+        who: DEMO_WHO[d.who] ? d.who : 'teacher'
       };
     } else {
       g.demo = null;
@@ -615,6 +658,8 @@
     demoBack: demoBack,
     demoForward: demoForward,
     demoStep: demoStep,
+    demoToStart: demoToStart,
+    demoSetWho: demoSetWho,
     demoMark: demoMark,
     demoClear: demoClear,
     endDemo: endDemo

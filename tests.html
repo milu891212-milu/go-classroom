@@ -259,11 +259,13 @@
     eq(M.timeView(g, W, 50000).remaining, 40000);
   });
 
-  test('讀秒：時間內下完不扣次數，超過一次扣一次', function () {
+  test('讀秒：時間內下完不扣次數，超過一次扣一次（含 1 秒壓秒緩衝）', function () {
     var g = fresh({ main: 60, byo: 10, periods: 2 });
     eq(M.timeView(g, B, 65000), { inByo: true, remaining: 5000, periods: 2, out: false });
-    eq(M.timeView(g, B, 71000), { inByo: true, remaining: 9000, periods: 1, out: false });
-    eq(M.timeView(g, B, 80000).out, true, '兩次讀秒用完');
+    eq(M.timeView(g, B, 70500), { inByo: true, remaining: 0, periods: 2, out: false }, '顯示到 0 之後 1 秒內還沒扣');
+    eq(M.timeView(g, B, 72000), { inByo: true, remaining: 9000, periods: 1, out: false }, '超過緩衝才扣，下一次從頭算');
+    eq(M.timeView(g, B, 81999).out, false);
+    eq(M.timeView(g, B, 82000).out, true, '兩次讀秒（各含緩衝）用完');
     M.play(g, 40, 65000);
     eq(g.clock.left.b, { main: 0, periods: 2 }, '第一次讀秒內下完');
     M.play(g, 41, 66000);
@@ -272,17 +274,27 @@
     eq(g.clock.left.b.periods, 1, '用了 15 秒，扣一次');
   });
 
+  test('壓秒：倒數到 0 的那一瞬間落子不扣讀秒', function () {
+    var g = fresh({ main: 0, byo: 30, periods: 3 });
+    M.play(g, 40, 30400);                     // 30 秒讀秒，0.4 秒後才點到
+    eq(g.clock.left.b, { main: 0, periods: 3 }, '沒有扣');
+    M.play(g, 41, 30400 + 31200);             // 白方超過緩衝 0.2 秒
+    eq(g.clock.left.w.periods, 2, '超過緩衝就扣');
+  });
+
   test('超時判負', function () {
     var g = fresh({ main: 60, byo: 10, periods: 2 });
-    eq(M.checkTimeout(g, 79999), false);
-    eq(M.checkTimeout(g, 80000), true);
+    eq(M.checkTimeout(g, 81999), false);
+    eq(M.checkTimeout(g, 82000), true);
     eq(g.status, 'finished'); eq(g.result.winner, W); eq(g.result.sgf, 'W+T'); eq(g.result.text, '白勝（黑方超時）');
     eq(M.play(g, 40, 90000).ok, false, '結束後不能再下');
   });
 
   test('沒有讀秒：基本時間用完就超時', function () {
     var g = fresh({ main: 30, byo: 0, periods: 0 });
-    eq(M.timeView(g, B, 29000).out, false); eq(M.timeView(g, B, 30000).out, true);
+    eq(M.timeView(g, B, 29000).out, false);
+    eq(M.timeView(g, B, 30500), { inByo: false, remaining: 0, periods: 0, out: false }, '壓秒緩衝');
+    eq(M.timeView(g, B, 31000).out, true);
   });
 
   test('超時後才點棋盤：判負而不是落子', function () {
@@ -546,10 +558,42 @@
     M0.demoBack(g); eq(M0.demoBack(g), false, '退到開頭為止');
     M0.demoForward(g); M0.demoForward(g); M0.demoForward(g); M0.demoForward(g);
     eq(g.demo.base, 4);
-    M0.demoBack(g); M0.demoMark(g, 5, 'tri'); M0.demoClear(g);
-    eq([g.demo.base, g.demo.marks.length], [4, 0], '全部清除會回到暫停時的局面');
+    M0.demoBack(g); M0.demoPlay(g, 0, 50); M0.demoMark(g, 5, 'tri');
+    eq(M0.demoClear(g), true);
+    eq([g.demo.base, g.demo.moves.length, g.demo.marks.length], [3, 0, 0], '結束試下：拿掉變化與標記，對局的著手停在原處');
+    eq(M0.demoClear(g), false, '沒有東西可清時不動');
     M.endDemo(g, 0);
     eq([g.record.moves.length, g.turn, g.status], [4, B, 'playing'], '對局本身完全沒變');
+  });
+
+  test('擺棋講解：|◀ 先回到開始下的那一手，再按一次才到最開頭', function () {
+    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 3, W, null, 0);
+    M.play(g, 0, 0); M.play(g, 1, 0);           // 開始下之後又下了 2 手，共 5 手
+    M.startDemo(g, 0);
+    M0.demoPlay(g, 0, 40);
+    eq(M0.demoToStart(g), true);
+    eq([g.demo.base, g.demo.moves.length], [3, 0], '回到第 3 手（開始下的局面），變化拿掉');
+    eq(M0.demoToStart(g), true); eq(g.demo.base, 0, '再按一次到最開頭');
+    eq(M0.demoToStart(g), false, '已經在最開頭');
+    M0.demoStep(g, 2);
+    eq(M0.demoToStart(g), true); eq(g.demo.base, 0, '在開始下之前的位置按，就到最開頭');
+  });
+
+  test('擺棋講解：學生權限設定與一人一手的輪流順序', function () {
+    var g = fresh(null);
+    M.play(g, 40, 0);                            // 黑下了一手，輪到白
+    M.startDemo(g, 0);
+    eq(g.demo.who, 'teacher', '預設只有老師能擺');
+    eq(M0.demoSetWho(g, 'turns'), true); eq(g.demo.who, 'turns');
+    eq(M0.demoSetWho(g, 'turns'), false, '一樣的設定不算變動');
+    eq(M0.demoSetWho(g, 'bogus'), false);
+    eq(M0.demoNextColor(g), W, '從輪到的一方開始');
+    M0.demoPlay(g, 0, 41);
+    eq(M0.demoNextColor(g), B, '擺完換另一方');
+    var back = M.normalize(throughDatabase(g));
+    eq(back.demo.who, 'turns', '經過資料庫後設定還在');
+    var old = throughDatabase(g); delete old.demo.who;
+    eq(M.normalize(old).demo.who, 'teacher', '舊資料沒有這個欄位時當成只有老師');
   });
 
   test('擺棋講解：一次退／進很多手，走到底為止', function () {
@@ -600,7 +644,7 @@
     M.resumePlay(g, 0);
     M.resign(g, W, 0);
     eq(M.startDemo(g, 0), true); eq(g.demo.from, 'finished');
-    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [] }, '空的變化與標記會補回來');
+    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [], who: 'teacher' }, '空的變化與標記會補回來');
     M0.demoBack(g);
     eq(M.normalize(throughDatabase(g)).demo.base, 0, '退到第 0 步也要保留');
     M0.demoForward(g);
