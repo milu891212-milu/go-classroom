@@ -85,20 +85,25 @@
    *   nav    上一手／下一手、結束試下
    *   marks  加標記
    *   stones 擺變化
-   *   turns  一人一手：只有輪到自己的顏色時才能擺
+   *   turns  學生持黑／持白：老師和學生各擺一色輪流，只有輪到自己的顏色時才能擺
    */
   function demoRights(g) {
     var none = { admin: false, nav: false, marks: false, stones: false, turns: false };
     if (!g || g.status !== 'demo' || !g.demo) return none;
-    var who = g.demo.who;
+    var who = g.demo.who, turns = who === 'black' || who === 'white';
     if (!online()) return { admin: true, nav: true, marks: true, stones: true, turns: false };
-    if (isTeacher()) return { admin: true, nav: true, marks: true, stones: true, turns: who === 'turns' };
+    if (isTeacher()) return { admin: true, nav: true, marks: true, stones: true, turns: turns };
     if (who === 'free') return { admin: false, nav: true, marks: true, stones: true, turns: false };
-    if (who === 'turns') return { admin: false, nav: false, marks: false, stones: true, turns: true };
+    if (turns) return { admin: false, nav: false, marks: false, stones: true, turns: true };
     return none;
   }
-  /* 一人一手時，下一手是不是輪到這台裝置的顏色 */
-  function myDemoTurn(g) { return M.demoNextColor(g) === myColor(); }
+  /* 學生持黑／持白時，這台裝置擺哪一色 */
+  function myDemoColor(g) {
+    var student = g.demo.who === 'black' ? BLACK : WHITE;
+    return isTeacher() ? E.other(student) : student;
+  }
+  /* 輪流擺時，下一手（盤上最後一手的另一方）是不是這台裝置的顏色 */
+  function myDemoTurn(g) { return M.demoNextColor(g) === myDemoColor(g); }
   /* 實際要用的工具：沒有標記權限時一律是擺子；一人一手時固定黑白輪流 */
   function demoTool(g) {
     var r = demoRights(g), isStone = STONE_TOOL[state.tool] !== undefined;
@@ -296,8 +301,9 @@
 
   var WHO_TOAST = {
     teacher: '回到老師控制，只有老師能擺',
-    free: '老師開放學生一起擺變化',
-    turns: '一人一手：學生先擺，之後輪流'
+    free: '學生控制：學生也可以擺變化、加標記',
+    black: '學生持黑、老師持白，輪流擺',
+    white: '學生持白、老師持黑，輪流擺'
   };
 
   /* 比對前後狀態，發出對應的音效與提示（自己或對方的動作都走這裡） */
@@ -540,11 +546,11 @@
       var who = g.demo.who, sub;
       if (!online()) sub = '在棋盤上擺變化或加標記';
       else if (teach) {
-        sub = who === 'free' ? '學生也可以擺變化、加標記'
-          : who === 'turns' ? '一人一手：學生先擺，之後輪流' : '在棋盤上擺變化或加標記，學生會同步看到';
+        sub = WHO_TOAST[who] && who !== 'teacher' ? WHO_TOAST[who] : '在棋盤上擺變化或加標記，學生會同步看到';
       } else {
         sub = who === 'free' ? '老師開放你一起擺變化、加標記'
-          : who === 'turns' ? '一人一手：你先擺，之後和老師輪流' : '請看棋盤';
+          : who === 'black' ? '你持黑、老師持白，輪流擺'
+          : who === 'white' ? '你持白、老師持黑，輪流擺' : '請看棋盤';
       }
       setStatus(online() && !teach ? '老師擺棋講解中' : '擺棋講解中',
         (g.demo.from === 'playing' ? '對局暫停，時間不會走。' : '') + sub);
@@ -969,12 +975,11 @@
         toast('還沒輪到你，等' + (isTeacher() ? '學生' : '老師') + '擺');
         return;
       }
-      var me = myColor();
       act(function (x) {
         // 以資料庫裡最新的狀態再確認一次權限（老師可能剛好改了設定，或對方剛擺了一手）
         var r = demoRights(x);
         if (!r.stones) return false;
-        if (r.turns) return M.demoNextColor(x) === me && M.demoPlay(x, 0, idx);
+        if (r.turns) return myDemoTurn(x) && M.demoPlay(x, myDemoColor(x), idx);
         return M.demoPlay(x, color, idx);
       }).then(function (ok) {
         if (!ok && state.pos && !state.pos.board[idx]) toast('這裡是禁著點，不能下');

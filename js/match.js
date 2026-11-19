@@ -6,7 +6,7 @@
  *     rule:   'territory'（比目法）或 'area'（數子法）,
  *     status: 'playing' | 'scoring' | 'finished' | 'demo'（老師擺棋講解，對局暫停）,
  *     demo:   null 或 { from:'playing'|'finished', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}],
- *                       who:'teacher'|'free'|'turns' },
+ *                       who:'teacher'|'free'|'black'|'white' },
  *     clock:  null（不計時）或 { main, byo, periods, left:{b:{main,periods}, w:{...}}, since },
  *     request: null 或 { type:'undo'|'count'|'draw', from },
  *     dead:   [數目時被標為死子的位置],
@@ -407,12 +407,12 @@
       moves: [],                        // 擺的變化
       undone: [],                       // 被「上一手」收回的變化，「下一手」可以再擺回來
       marks: [],
-      who: 'teacher'                    // 誰可以擺：'teacher' 只有老師、'free' 學生也可以、'turns' 老師一手學生一手
+      who: 'teacher'   // 誰可以擺：'teacher' 只有老師、'free' 學生控制、'black'／'white' 學生持黑／持白和老師輪流
     };
     return true;
   }
 
-  var DEMO_WHO = { teacher: true, free: true, turns: true };
+  var DEMO_WHO = { teacher: true, free: true, black: true, white: true };
 
   /* 老師設定學生能不能擺棋 */
   function demoSetWho(game, who) {
@@ -445,11 +445,10 @@
     return { pos: pos, board: pos.board, numbers: numbers, last: last, base: base, total: game.record.moves.length };
   }
 
-  /* 擺變化時「黑白輪流」的下一手是誰。一人一手時，變化的第一手由學生（學生的顏色）先擺。 */
+  /* 擺變化時「黑白輪流」的下一手是誰：看盤上最後一手是誰下的，換另一方 */
   function demoNextColor(game) {
     var moves = game.demo ? game.demo.moves : [];
     if (moves.length) return E.other(moves[moves.length - 1].c);
-    if (game.demo && game.demo.who === 'turns' && game.teacherColor) return E.other(game.teacherColor);
     var base = demoBase(game);
     return base >= game.record.moves.length ? game.turn : G.naturalTurn(game.record, base);
   }

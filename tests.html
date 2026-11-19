@@ -579,35 +579,35 @@
     eq(M0.demoToStart(g), true); eq(g.demo.base, 0, '在開始下之前的位置按，就到最開頭');
   });
 
-  test('擺棋講解：學生權限設定與一人一手的輪流順序', function () {
+  test('擺棋講解：學生擺棋的設定（學生控制／持黑／持白）', function () {
     var g = fresh(null);
-    M.play(g, 40, 0);                            // 黑下了一手，輪到白
+    M.play(g, 40, 0);
     M.startDemo(g, 0);
-    eq(g.demo.who, 'teacher', '預設只有老師能擺');
-    eq(M0.demoSetWho(g, 'turns'), true); eq(g.demo.who, 'turns');
-    eq(M0.demoSetWho(g, 'turns'), false, '一樣的設定不算變動');
+    eq(g.demo.who, 'teacher', '預設是老師控制');
+    eq(M0.demoSetWho(g, 'black'), true); eq(g.demo.who, 'black');
+    eq(M0.demoSetWho(g, 'black'), false, '一樣的設定不算變動');
+    eq(M0.demoSetWho(g, 'white'), true); eq(M0.demoSetWho(g, 'free'), true);
     eq(M0.demoSetWho(g, 'bogus'), false);
-    eq(M0.demoNextColor(g), W, '從輪到的一方開始');
-    M0.demoPlay(g, 0, 41);
-    eq(M0.demoNextColor(g), B, '擺完換另一方');
+    eq(M0.demoSetWho(g, 'turns'), false, '舊的一人一手已經拿掉');
     var back = M.normalize(throughDatabase(g));
-    eq(back.demo.who, 'turns', '經過資料庫後設定還在');
-    var old = throughDatabase(g); delete old.demo.who;
-    eq(M.normalize(old).demo.who, 'teacher', '舊資料沒有這個欄位時當成只有老師');
+    eq(back.demo.who, 'free', '經過資料庫後設定還在');
+    var old = throughDatabase(g); old.demo.who = 'turns';
+    eq(M.normalize(old).demo.who, 'teacher', '不認得的舊設定當成老師控制');
   });
 
-  test('擺棋講解：連線時一人一手由學生先擺', function () {
-    var g = fresh(null);
-    g.teacherColor = W;                          // 老師執白、學生執黑
-    M.play(g, 40, 0);                            // 黑下了一手，對局輪到白（老師）
+  test('擺棋講解：輪流擺時，下一手看盤上最後一手是誰下的', function () {
+    var g = M.create(S.load('(;SZ[9];B[ee];W[cc];B[gg])'), 3, W, null, 0);
     M.startDemo(g, 0);
-    eq(M0.demoNextColor(g), W, '老師控制時照對局的順序');
-    M0.demoSetWho(g, 'turns');
-    eq(M0.demoNextColor(g), B, '一人一手：第一手是學生的顏色');
+    M0.demoSetWho(g, 'white');
+    eq(M0.demoNextColor(g), W, '最後一手是黑，換白');
+    M0.demoBack(g);
+    eq(M0.demoNextColor(g), B, '退一手後最後一手是白，換黑');
     M0.demoPlay(g, 0, 41);
-    eq([g.demo.moves[0].c, M0.demoNextColor(g)], [B, W], '接著換老師');
+    eq([g.demo.moves[0].c, M0.demoNextColor(g)], [B, W], '擺完一手換另一方');
+    M0.demoPlay(g, W, 42); M0.demoPlay(g, W, 43);
+    eq(M0.demoNextColor(g), B, '最後一顆是白就換黑');
     M0.demoClear(g);
-    eq(M0.demoNextColor(g), B, '結束試下後重新開始，又是學生先');
+    eq(M0.demoNextColor(g), B, '結束試下後，看對局停在的那一手');
   });
 
   test('擺棋講解：一次退／進很多手，走到底為止', function () {
