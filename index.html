@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=14">
+<link rel="stylesheet" href="css/style.css?v=15">
 </head>
 <body>
 
@@ -95,6 +95,9 @@
       <span>×</span>
       <label><input type="number" id="newTimePeriods" min="0" max="99" step="1"> 次</label>
     </div>
+    <label class="field" id="newStudentRow" hidden><span>對手學生</span>
+      <select id="newStudent"></select>
+    </label>
     <div class="field" id="newSeatRow" hidden><span>老師執</span>
       <div class="choice">
         <label><input type="radio" name="newSeat" value="1"> 黑</label>
@@ -263,8 +266,25 @@
             <button class="btn small" data-who="white" title="學生擺白、老師擺黑，輪流（再按一次取消）">學生持白</button>
           </div>
         </div>
+        <div id="stageBox">
+          <div class="teach-title">請學生上台（上台的學生可以擺子、標記、畫線，再按一次請他下台）</div>
+          <div class="stage-list" id="stageList"></div>
+        </div>
         <div class="teach-title" id="teachTurn" hidden></div>
         <button class="btn primary wide" id="btnTeachEnd">結束擺棋，回到對局</button>
+      </div>
+
+      <!-- 一起答題 -->
+      <div class="box teach" id="quizBox" hidden>
+        <div class="quiz-title" id="quizTitle"></div>
+        <div class="quiz-text" id="quizText"></div>
+        <div class="quiz-results" id="quizResults"></div>
+        <button class="btn wide" id="btnQuizOpen">出題：大家一起答</button>
+        <div class="row" id="quizOpenButtons">
+          <button class="btn" id="btnQuizCancel">取消出題</button>
+          <button class="btn primary" id="btnQuizShow">公布答案</button>
+        </div>
+        <button class="btn wide" id="btnQuizClose">結束答題</button>
       </div>
 
       <!-- 講解房：換棋盤或載入棋譜（學生留在房間裡，不用重進） -->
@@ -328,6 +348,9 @@
     <span>×</span>
     <label><input type="number" id="startTimePeriods" min="0" max="99" step="1"> 次</label>
   </div>
+  <label class="field" id="startStudentRow" hidden><span>對手學生</span>
+    <select id="startStudent"></select>
+  </label>
   <div class="field" id="startSeatRow" hidden><span>老師執</span>
     <div class="choice">
       <label><input type="radio" name="startSeat" value="1"> 黑</label>
@@ -372,6 +395,7 @@
 </dialog>
 
 <!-- 聊天室 -->
+<button class="hand-fab" id="handFab" hidden>🙋 舉手</button>
 <button class="chat-fab" id="chatFab" hidden>💬 聊天<span class="badge" id="chatBadge" hidden></span></button>
 <aside class="chat" id="chatPanel" hidden aria-label="聊天室">
   <header class="chat-head">
@@ -397,14 +421,14 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=14"></script>
-<script src="js/engine.js?v=14"></script>
-<script src="js/sgf.js?v=14"></script>
-<script src="js/game.js?v=14"></script>
-<script src="js/match.js?v=14"></script>
-<script src="js/sound.js?v=14"></script>
-<script src="js/net.js?v=14"></script>
-<script src="js/board-view.js?v=14"></script>
-<script src="js/app.js?v=14"></script>
+<script src="js/config.js?v=15"></script>
+<script src="js/engine.js?v=15"></script>
+<script src="js/sgf.js?v=15"></script>
+<script src="js/game.js?v=15"></script>
+<script src="js/match.js?v=15"></script>
+<script src="js/sound.js?v=15"></script>
+<script src="js/net.js?v=15"></script>
+<script src="js/board-view.js?v=15"></script>
+<script src="js/app.js?v=15"></script>
 </body>
 </html>

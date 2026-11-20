@@ -6,7 +6,11 @@
  *     rule:   'territory'（比目法）或 'area'（數子法）,
  *     status: 'playing' | 'scoring' | 'finished' | 'demo'（老師擺棋講解，對局暫停）,
  *     demo:   null 或 { from:'playing'|'finished'|'lecture', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}],
- *                       draw:[{t:'pen'|'arrow', pts:[x,y,x,y…]}], who:'teacher'|'free'|'black'|'white' },
+ *                       draw:[{t:'pen'|'arrow', pts:[x,y,x,y…]}], who:'teacher'|'free'|'black'|'white'|'stage',
+ *                       stage: 'stage' 時被老師請上台的學生帳號 },
+ *     quiz:   null 或 { n: 第幾題, state:'open'（作答中）|'shown'（已公布）, size, answers:[{a: 帳號, p: 位置}] }
+ *             擺棋講解（含講解房）時老師出題，學生各自點一個位置，老師公布後大家才看得到彼此的答案,
+ *     student: 連線對弈時跟老師下的學生帳號（'' 表示任何學生都能下）,
  *     lecture: true 表示這是講解房（沒有對局，一直停在擺棋講解，見 createLecture）,
  *     clock:  null（不計時）或 { main, byo, periods, left:{b:{main,periods}, w:{...}}, since },
  *     request: null 或 { type:'undo'|'count'|'draw', from },
@@ -36,6 +40,8 @@
       agree: { b: false, w: false },  // 數目時雙方是否已確認結果
       result: null,
       teacherColor: 0,                // 連線對弈時老師執哪一色（單機為 0）
+      student: '',                    // 連線對弈時跟老師下的學生帳號（'' = 不限定）
+      quiz: null,                     // 擺棋講解時的「一起答題」
       rule: 'area',                   // 數目方式：'territory' 比目法、'area' 數子法
       demo: null                      // 老師擺棋講解時的變化與標記
     };
@@ -409,7 +415,8 @@
       undone: [],                       // 被「上一手」收回的變化，「下一手」可以再擺回來
       marks: [],
       draw: [],                         // 畫筆與箭頭（棋盤的 SVG 座標）
-      who: 'teacher'   // 誰可以擺：'teacher' 只有老師、'free' 學生控制、'black'／'white' 學生持黑／持白和老師輪流
+      who: 'teacher',  // 誰可以擺：'teacher' 只有老師、'free' 學生控制、'black'／'white' 學生持黑／持白和老師輪流、'stage' 上台的學生
+      stage: ''        // 被請上台的學生帳號（who = 'stage' 時）
     };
     return true;
   }
@@ -427,7 +434,7 @@
       from: 'lecture',
       base: Math.max(0, Math.min(n, cursor === undefined ? n : cursor)),
       moves: [], undone: [], marks: [], draw: [],
-      who: 'teacher'
+      who: 'teacher', stage: ''
     };
     return game;
   }
@@ -436,11 +443,14 @@
   function lectureLoad(game, record, cursor) {
     if (!game.lecture) return false;
     var who = game.demo ? game.demo.who : 'teacher';
+    var stage = game.demo ? game.demo.stage : '';
     var fresh = createLecture(record, cursor);
     game.record = fresh.record;
     game.turn = fresh.turn;
     game.demo = fresh.demo;
     game.demo.who = who;
+    game.demo.stage = stage || '';
+    game.quiz = null;   // 換了棋盤，原本的題目作廢
     return true;
   }
 
@@ -468,13 +478,66 @@
     return true;
   }
 
-  var DEMO_WHO = { teacher: true, free: true, black: true, white: true };
+  var DEMO_WHO = { teacher: true, free: true, black: true, white: true, stage: true };
 
-  /* 老師設定學生能不能擺棋 */
-  function demoSetWho(game, who) {
-    if (game.status !== 'demo' || !DEMO_WHO[who] || game.demo.who === who) return false;
+  /* 老師設定學生能不能擺棋；who = 'stage' 時 account 是請上台的學生 */
+  function demoSetWho(game, who, account) {
+    if (game.status !== 'demo' || !DEMO_WHO[who]) return false;
+    var stage = who === 'stage' ? String(account || '') : '';
+    if (who === 'stage' && !stage) return false;
+    if (game.demo.who === who && (game.demo.stage || '') === stage) return false;
     game.demo.who = who;
+    game.demo.stage = stage;
     return true;
+  }
+
+  /* ---------- 一起答題 ---------- */
+
+  /* 老師出題：學生各自點一個位置 */
+  function quizOpen(game) {
+    if (game.status !== 'demo' || (game.quiz && game.quiz.state === 'open')) return false;
+    game.quiz = { n: ((game.quiz && game.quiz.n) || 0) + 1, state: 'open', size: game.record.size, answers: [] };
+    return true;
+  }
+
+  /* 學生作答（公布前可以改）；點同一點兩次就收回答案 */
+  function quizAnswer(game, account, idx) {
+    var q = game.quiz, size = game.record.size;
+    if (game.status !== 'demo' || !q || q.state !== 'open' || !account) return false;
+    if (q.size !== size || !(idx >= 0 && idx < size * size)) return false;
+    var list = q.answers, i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].a !== account) continue;
+      if (list[i].p === idx) list.splice(i, 1);
+      else list[i].p = idx;
+      return true;
+    }
+    list.push({ a: account, p: idx });
+    return true;
+  }
+
+  function quizShow(game) {
+    if (!game.quiz || game.quiz.state !== 'open') return false;
+    game.quiz.state = 'shown';
+    return true;
+  }
+
+  /* 結束（或取消）答題 */
+  function quizClose(game) {
+    if (!game.quiz) return false;
+    game.quiz = null;
+    return true;
+  }
+
+  /* 答案依位置分組：[{ p, names: [...] }]，人多的排前面 */
+  function quizGroups(game) {
+    var q = game.quiz, by = {}, out = [];
+    if (!q) return out;
+    q.answers.forEach(function (x) {
+      if (!by[x.p]) { by[x.p] = { p: x.p, names: [] }; out.push(by[x.p]); }
+      by[x.p].names.push(x.a);
+    });
+    return out.sort(function (a, b) { return b.names.length - a.names.length || a.p - b.p; });
   }
 
   /* 擺棋時最多退回到哪一手：開始下的那一手（例如從棋譜第 75 手開始下，就是 75） */
@@ -624,6 +687,7 @@
     var from = game.demo && game.demo.from === 'finished' && game.result ? 'finished' : 'playing';
     game.status = from;
     game.demo = null;
+    game.quiz = null;
     if (from === 'playing' && game.clock) game.clock.since = now;
     return true;
   }
@@ -670,6 +734,7 @@
     g.agree = { b: !!(g.agree && g.agree.b), w: !!(g.agree && g.agree.w) };
     g.result = g.result || null;
     g.teacherColor = g.teacherColor || 0;
+    g.student = typeof g.student === 'string' ? g.student : '';
     g.rule = g.rule === 'territory' ? 'territory' : 'area';
     g.lecture = !!g.lecture;
     if (g.lecture) g.status = 'demo';
@@ -683,10 +748,20 @@
         undone: toArray(d.undone).map(stone),
         marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; }),
         draw: toArray(d.draw).map(function (s) { return { t: s.t === 'arrow' ? 'arrow' : 'pen', pts: toArray(s.pts) }; }),
-        who: DEMO_WHO[d.who] ? d.who : 'teacher'
+        who: DEMO_WHO[d.who] ? d.who : 'teacher',
+        stage: typeof d.stage === 'string' ? d.stage : ''
       };
+      if (g.demo.who === 'stage' && !g.demo.stage) g.demo.who = 'teacher';
+      var q = g.quiz;
+      g.quiz = q && (q.state === 'open' || q.state === 'shown') ? {
+        n: q.n || 1,
+        state: q.state,
+        size: q.size || r.size,
+        answers: toArray(q.answers).filter(function (x) { return x && x.a; }).map(function (x) { return { a: x.a, p: x.p }; })
+      } : null;
     } else {
       g.demo = null;
+      g.quiz = null;
     }
     return g;
   }
@@ -725,6 +800,11 @@
     demoToStart: demoToStart,
     demoFloor: demoFloor,
     demoSetWho: demoSetWho,
+    quizOpen: quizOpen,
+    quizAnswer: quizAnswer,
+    quizShow: quizShow,
+    quizClose: quizClose,
+    quizGroups: quizGroups,
     demoMark: demoMark,
     demoClear: demoClear,
     endDemo: endDemo

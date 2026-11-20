@@ -17,6 +17,9 @@
  *   clearChat()               清空聊天室（老師）
  *   watchChatLock(cb)         cb(學生是否被禁止發言)
  *   setChatLock(on)           老師開關「學生禁言」
+ *   setHand(on)               學生舉手／放下
+ *   lowerHand(account)        老師幫某個學生放下手（請上台後）
+ *   watchHands(cb)            cb([{ a: 帳號, t: 舉手時間 }])，先舉手的排前面
  *
  * 有兩種實作：
  *   FirebaseBackend 正式使用。
@@ -38,6 +41,15 @@
   var DEMO_PRESENCE = 'go-classroom-demo-presence-';
   var DEMO_CHAT = 'go-classroom-demo-chat';
   var DEMO_LOCK = 'go-classroom-demo-chatlock';
+  var DEMO_HANDS = 'go-classroom-demo-hands';
+
+  /* 帳號當成資料庫的鍵時，不能有 . # $ [ ] / 這些字元 */
+  function safeKey(account) { return String(account).replace(/[.#$\[\]\/]/g, '_') || '_'; }
+  function sortHands(obj) {
+    return Object.keys(obj || {}).map(function (k) { return obj[k]; })
+      .filter(function (h) { return h && h.a; })
+      .sort(function (x, y) { return (x.t || 0) - (y.t || 0); });
+  }
   var CHAT_KEEP = 100;      // 聊天室只保留、只顯示最近這麼多則
   var CHAT_MAX_LEN = 200;   // 一則訊息最多幾個字
 
@@ -59,11 +71,13 @@
     this.presenceCb = null;
     this.chatCb = null;
     this.lockCb = null;
+    this.handsCb = null;
     this.beat = 0;
     global.addEventListener('storage', function (ev) {
       if (ev.key === DEMO_GAME) self._emitGame();
       else if (ev.key === DEMO_CHAT) self._emitChat();
       else if (ev.key === DEMO_LOCK) self._emitLock();
+      else if (ev.key === DEMO_HANDS) self._emitHands();
       else if (ev.key && ev.key.indexOf(DEMO_PRESENCE) === 0) self._emitPresence();
     });
     global.addEventListener('pagehide', function () { self._stopPresence(); });
@@ -171,6 +185,26 @@
     this.lockCb = cb;
     setTimeout(function () { self._emitLock(); }, 0);
     return function () { self.lockCb = null; };
+  };
+  LocalBackend.prototype._hands = function () {
+    try { return JSON.parse(localStorage.getItem(DEMO_HANDS) || '{}'); } catch (e) { return {}; }
+  };
+  LocalBackend.prototype._emitHands = function () { if (this.handsCb) this.handsCb(sortHands(this._hands())); };
+  LocalBackend.prototype._setHand = function (account, on) {
+    var h = this._hands();
+    if (on) h[safeKey(account)] = { a: account, t: Date.now() };
+    else delete h[safeKey(account)];
+    localStorage.setItem(DEMO_HANDS, JSON.stringify(h));
+    this._emitHands();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.setHand = function (on) { return this._setHand(this.account, on); };
+  LocalBackend.prototype.lowerHand = function (account) { return this._setHand(account, false); };
+  LocalBackend.prototype.watchHands = function (cb) {
+    var self = this;
+    this.handsCb = cb;
+    setTimeout(function () { self._emitHands(); }, 0);
+    return function () { self.handsCb = null; };
   };
   LocalBackend.prototype.setChatLock = function (on) {
     if (on) localStorage.setItem(DEMO_LOCK, '1'); else localStorage.removeItem(DEMO_LOCK);
@@ -403,6 +437,23 @@
 
   FirebaseBackend.prototype.setChatLock = function (on) {
     return this.room.child('chatLock').set(on ? true : null);
+  };
+
+  FirebaseBackend.prototype.setHand = function (on) {
+    var ref = this.room.child('hands/' + safeKey(this.user.account));
+    if (!on) return ref.remove();
+    ref.onDisconnect().remove();   // 斷線（關掉網頁）就自動放下
+    return ref.set({ a: this.user.account, t: this.now() });
+  };
+
+  FirebaseBackend.prototype.lowerHand = function (account) {
+    return this.room.child('hands/' + safeKey(account)).remove();
+  };
+
+  FirebaseBackend.prototype.watchHands = function (cb) {
+    var ref = this.room.child('hands');
+    var handler = ref.on('value', function (s) { cb(sortHands(s.val())); }, noop);
+    return function () { ref.off('value', handler); };
   };
 
   /* ================= 選擇要用哪一種 ================= */

@@ -661,7 +661,7 @@
     M.resumePlay(g, 0);
     M.resign(g, W, 0);
     eq(M.startDemo(g, 0), true); eq(g.demo.from, 'finished');
-    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [], draw: [], who: 'teacher' }, '空的變化與標記會補回來');
+    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [], draw: [], who: 'teacher', stage: '' }, '空的變化與標記會補回來');
     M0.demoBack(g);
     eq(M.normalize(throughDatabase(g)).demo.base, 0, '退到第 0 步也要保留');
     M0.demoForward(g);
@@ -731,6 +731,43 @@
     eq(M0.demoUndraw(g, true), false, '沒有畫線時不動作');
     M0.demoDraw(g, { t: 'pen', pts: [1, 1, 2, 2] });
     eq(M0.demoClear(g), true); eq(g.demo.draw, [], '結束試下一併擦掉');
+  });
+
+  /* ---------- 上台與一起答題 ---------- */
+  test('上台：指定一位學生，再設回老師控制；經過資料庫後內容一致', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(M0.demoSetWho(g, 'stage'), false, '沒有指定學生不行');
+    eq(M0.demoSetWho(g, 'stage', 'student1'), true);
+    eq(M0.demoSetWho(g, 'stage', 'student1'), false, '同一位學生不用重設');
+    eq(M0.demoSetWho(g, 'stage', 'student2'), true, '換人上台');
+    var back = M0.normalize(throughDatabase(g));
+    eq(back.demo.who, 'stage'); eq(back.demo.stage, 'student2');
+    eq(M0.demoSetWho(g, 'teacher'), true); eq(g.demo.stage, '');
+  });
+
+  test('一起答題：作答、改答案、收回、公布、分組統計、換棋盤作廢', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(M0.quizAnswer(g, 'a', 10), false, '還沒出題不能答');
+    eq(M0.quizOpen(g), true); eq(M0.quizOpen(g), false, '作答中不能再出題');
+    eq(M0.quizAnswer(g, 'a', 10), true); eq(M0.quizAnswer(g, 'b', 10), true); eq(M0.quizAnswer(g, 'c', 20), true);
+    eq(M0.quizAnswer(g, 'c', 30), true, '改答案');
+    eq(M0.quizAnswer(g, 'b', 10), true, '同一點再點一次收回');
+    eq(M0.quizAnswer(g, 'a', 81), false, '超出棋盤');
+    eq(M0.quizGroups(g), [{ p: 10, names: ['a'] }, { p: 30, names: ['c'] }]);
+    var back = M0.normalize(throughDatabase(g));
+    eq(back.quiz, g.quiz, '經過資料庫內容一致');
+    eq(M0.quizShow(g), true); eq(M0.quizAnswer(g, 'd', 40), false, '公布後不能再答');
+    eq(M0.quizOpen(g), true); eq(g.quiz.n, 2, '下一題'); eq(g.quiz.answers, []);
+    M0.lectureLoad(g, G.newRecord({ size: 13 }), 0);
+    eq(g.quiz, null, '換棋盤後題目作廢');
+  });
+
+  test('對局指定學生：存得進資料庫，舊資料沒有這個欄位時是不限定', function () {
+    var g = M.create(G.newRecord({ size: 9 }), 0, B, null, 0);
+    g.student = 'student1';
+    eq(M0.normalize(throughDatabase(g)).student, 'student1');
+    delete g.student;
+    eq(M0.normalize(throughDatabase(g)).student, '');
   });
 
   var pass = results.filter(function (r) { return r.ok; }).length;
