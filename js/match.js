@@ -480,10 +480,13 @@
 
   var DEMO_WHO = { teacher: true, free: true, black: true, white: true, stage: true };
 
-  /* 老師設定學生能不能擺棋；who = 'stage' 時 account 是請上台的學生 */
+  /*
+   * 老師設定學生能不能擺棋。account 是指定的學生：
+   *   'stage' 這位學生自由擺（一定要指定）；'black'／'white' 這位學生持黑／持白跟老師輪流（'' = 全部學生）
+   */
   function demoSetWho(game, who, account) {
     if (game.status !== 'demo' || !DEMO_WHO[who]) return false;
-    var stage = who === 'stage' ? String(account || '') : '';
+    var stage = who === 'stage' || who === 'black' || who === 'white' ? String(account || '') : '';
     if (who === 'stage' && !stage) return false;
     if (game.demo.who === who && (game.demo.stage || '') === stage) return false;
     game.demo.who = who;

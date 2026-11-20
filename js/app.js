@@ -106,7 +106,9 @@
     if (who === 'stage') {
       return g.demo.stage === session.account ? { admin: false, nav: true, marks: true, stones: true, turns: false } : none;
     }
-    if (turns) return { admin: false, nav: false, marks: false, stones: true, turns: true };
+    if (turns && (!g.demo.stage || g.demo.stage === session.account)) {
+      return { admin: false, nav: false, marks: false, stones: true, turns: true };
+    }
     return none;
   }
   /* 學生持黑／持白時，這台裝置擺哪一色 */
@@ -315,20 +317,16 @@
 
   /* 學生擺棋權限的說明（toast = true 是權限剛改變時跳出的提示） */
   function whoText(g, isToast) {
-    var who = g.demo.who;
-    if (who !== 'stage') return isToast || isTeacher() ? WHO_TOAST[who] : '';
-    var name = g.demo.stage;
-    if (isTeacher()) return name + ' 在台上，可以擺子、加標記、畫線';
-    if (name === session.account) return isToast ? '老師請你上台！你可以擺子、加標記、畫線' : '你在台上：可以擺子、加標記、畫線';
-    return name + ' 在台上擺給大家看';
+    var who = g.demo.who, name = g.demo.stage, teacher = isTeacher();
+    var me = online() && !teacher && !!name && name === session.account;
+    if (who === 'teacher') return isToast ? '回到老師擺' : teacher ? '' : '請看棋盤';
+    if (who === 'free') return teacher ? '全部學生都可以擺' : '大家都可以擺';
+    if (who === 'stage') return teacher ? name + ' 自由擺' : me ? (isToast ? '老師請你上台擺！' : '你可以擺') : name + ' 在擺';
+    var c = who === 'black' ? '黑' : '白', t = who === 'black' ? '白' : '黑';
+    if (teacher) return (name || '全部學生') + '持' + c + '，跟老師輪流擺';
+    if (!name || me) return '你持' + c + '、老師持' + t + '，輪流擺';
+    return name + '持' + c + '，跟老師輪流擺';
   }
-
-  var WHO_TOAST = {
-    teacher: '回到老師控制，只有老師能擺',
-    free: '學生控制：學生也可以擺變化、加標記',
-    black: '學生持黑、老師持白，輪流擺',
-    white: '學生持白、老師持黑，輪流擺'
-  };
 
   /* 比對前後狀態，發出對應的音效與提示（自己或對方的動作都走這裡） */
   function effects(prev, g) {
@@ -347,8 +345,7 @@
         var quizKey = g.quiz ? g.quiz.n + ':' + g.quiz.state : '';
         if (quizKey !== prev.quiz && g.quiz && online()) {
           Sound.notice();
-          if (g.quiz.state === 'open') { if (!isTeacher()) toast('老師出題了！點棋盤選你的答案'); }
-          else toast('公布答案');
+          if (g.quiz.state === 'open' && !isTeacher()) toast('老師出題：點棋盤選下一手');
         } else if (prev.who && (g.demo.who !== prev.who || g.demo.stage !== prev.stage) && online()) {
           Sound.notice();
           toast(whoText(g, true));
@@ -595,14 +592,8 @@
     } else if (demo) {
       var who = g.demo.who, sub;
       if (!online()) sub = '在棋盤上擺變化或加標記';
-      else if (teach) {
-        sub = who !== 'teacher' ? whoText(g, false) : '在棋盤上擺變化或加標記，學生會同步看到';
-      } else {
-        sub = who === 'stage' ? whoText(g, false)
-          : who === 'free' ? '老師開放你一起擺變化、加標記'
-          : who === 'black' ? '你持黑、老師持白，輪流擺'
-          : who === 'white' ? '你持白、老師持黑，輪流擺' : '請看棋盤';
-      }
+      else if (teach) sub = who === 'teacher' ? '學生會同步看到' : whoText(g, false);
+      else sub = whoText(g, false);
       if (lecture) {
         setStatus(online() && !teach ? '老師講解中' : '講解房', sub);
       } else {
@@ -652,10 +643,6 @@
       Array.prototype.forEach.call($('teachBox').querySelectorAll('[data-tool]'), function (b) {
         b.classList.toggle('on', b.getAttribute('data-tool') === tool);
       });
-      Array.prototype.forEach.call($('teachWho').querySelectorAll('[data-who]'), function (b) {
-        b.classList.toggle('on', b.getAttribute('data-who') === g.demo.who);
-      });
-      $('stageBox').hidden = !(rights.admin && online());
       if (rights.admin && online()) renderStage(g);
       var dm = g.demo, atEnd = dv.base >= dv.total, start = M.demoFloor(g);
       var noBack = !dm.moves.length && dv.base <= start;   // 最多退到開始下的那一手
@@ -667,7 +654,7 @@
       $('teachNav').hidden = !rights.nav;   // 空白棋盤也要有：一手一手退回／重擺擺過的變化
       $('btnTeachClear').hidden = !rights.nav;
       $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length && !dm.draw.length;
-      $('btnTeachClear').textContent = lecture ? '清除盤面（變化、標記、畫線）' : '結束試下';
+      $('btnTeachClear').textContent = lecture ? '清除盤面' : '結束試下';
       $('teachStoneBox').hidden = !rights.stones || rights.turns;
       $('teachMarkBox').hidden = !rights.marks;
       $('teachDrawBox').hidden = !rights.marks;
@@ -997,7 +984,7 @@
     var btn = ev.target.closest('[data-lsize]');
     if (!btn || !inLecture()) return;
     var size = parseInt(btn.getAttribute('data-lsize'), 10);
-    ask('換成 ' + size + ' 路空白棋盤？', '目前棋盤上的棋子、變化、標記和畫線都會清掉。', '換棋盤').then(function (ok) {
+    ask('換成 ' + size + '路棋盤？', '目前的盤面會清掉。', '換棋盤').then(function (ok) {
       if (ok && inLecture()) lectureReplace(G.newRecord({ size: size }), 0);
     });
   });
@@ -1228,13 +1215,6 @@
   });
   $('btnTeachClear').addEventListener('click', function () {
     act(function (x) { return demoRights(x).nav && M.demoClear(x); });
-  });
-  $('teachWho').addEventListener('click', function (ev) {
-    var btn = ev.target.closest('[data-who]');
-    if (!btn || !canTeach()) return;
-    var pick = btn.getAttribute('data-who');
-    // 按已經選的那一個就是取消，回到老師控制
-    act(function (x) { return M.demoSetWho(x, x.demo && x.demo.who === pick ? 'teacher' : pick); });
   });
   $('btnTeachEnd').addEventListener('click', function () {
     act(function (x) { return M.endDemo(x, now()); });
@@ -1468,11 +1448,21 @@
     $('handFab').textContent = up ? '🙋 放下手' : '🙋 舉手';
   }
 
-  /* 老師的上台名單：舉手的排前面 */
+  /*
+   * 現在是誰在跟老師擺：'*' 全部學生、學生帳號，或 ''（老師自己擺）；mode 是 'stage'／'black'／'white'
+   */
+  var MODE_NAME = { stage: '自由擺', black: '持黑', white: '持白' };
+  function currentPick(g) {
+    var d = g.demo;
+    if (!d || d.who === 'teacher') return { who: '', mode: '' };
+    if (d.who === 'free') return { who: '*', mode: 'stage' };
+    return { who: d.stage || '*', mode: d.who };
+  }
+
+  /* 老師的在線學生列表：舉手的排前面；第一個是「全部學生」 */
   function renderStage(g) {
-    var box = $('stageList'), list = onlineStudents();
-    var onStage = g.demo && g.demo.who === 'stage' ? g.demo.stage : '';
-    if (onStage && list.indexOf(onStage) < 0) list.push(onStage);
+    var box = $('stageList'), list = onlineStudents(), pick = currentPick(g);
+    if (pick.who && pick.who !== '*' && list.indexOf(pick.who) < 0) list.push(pick.who);
     list.sort(function (a, b) {
       var ha = handUp(a), hb = handUp(b);
       if (ha !== hb) return ha ? -1 : 1;
@@ -1486,14 +1476,29 @@
       box.appendChild(none);
       return;
     }
-    list.forEach(function (a) {
-      var b = document.createElement('button');
+    ['*'].concat(list).forEach(function (a) {
+      var b = document.createElement('button'), on = a === pick.who;
       b.type = 'button';
-      b.className = 'btn' + (a === onStage ? ' on' : handUp(a) ? ' raised' : '');
-      b.textContent = (handUp(a) ? '🙋 ' : '') + a + (a === onStage ? '（台上）' : '');
+      b.className = 'btn' + (on ? ' on' : handUp(a) ? ' raised' : '');
+      b.textContent = (handUp(a) ? '🙋 ' : '') + (a === '*' ? '全部學生' : a) + (on ? '（' + MODE_NAME[pick.mode] + '）' : '');
       b.setAttribute('data-stage', a);
       box.appendChild(b);
     });
+  }
+
+  var stuTarget = '';   // 對話框正在設定的學生（'*' = 全部學生）
+  function openStudentDialog(a) {
+    var g = state.game;
+    if (!g || g.status !== 'demo') return;
+    stuTarget = a;
+    var pick = currentPick(g);
+    $('stuTitle').textContent = a === '*' ? '全部學生' : a;
+    Array.prototype.forEach.call($('stuOptions').querySelectorAll('[data-mode]'), function (b) {
+      var m = b.getAttribute('data-mode');
+      b.hidden = m === 'teacher' && pick.who !== a;
+      b.classList.toggle('on', pick.who === a && pick.mode === m);
+    });
+    $('dlgStudent').showModal();
   }
 
   /* 學生現在點棋盤是在作答（不是擺子） */
@@ -1506,7 +1511,7 @@
     var q = g.quiz;
     if (!q || q.size !== g.record.size) return null;
     var me = online() ? session.account : '';
-    var all = isTeacher() || q.state === 'shown';
+    var all = isTeacher();   // 統計只有老師看得到
     return M.quizGroups(g).filter(function (grp) {
       return all || grp.names.indexOf(me) >= 0;
     }).map(function (grp) {
@@ -1523,28 +1528,19 @@
     var size = g.record.size, groups = q ? M.quizGroups(g) : [];
     var students = onlineStudents(), answered = q ? q.answers.map(function (x) { return x.a; }) : [];
     var title = '', text = '';
-    if (!q) {
-      text = '出題後，每位學生在棋盤上點一個位置作答，公布前看不到別人的答案。';
-    } else if (q.state === 'open') {
-      title = '作答中（第 ' + q.n + ' 題）';
-      if (teacher) {
-        var missing = students.filter(function (a) { return answered.indexOf(a) < 0; });
-        text = '已作答 ' + answered.length + ' 人' + (students.length ? ' / 在線學生 ' + students.length + ' 人' : '') +
-          (missing.length ? '。還沒答：' + missing.join('、') : '');
-      } else {
-        var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
-        text = '點棋盤選你的答案，公布前可以改；再點一次同一點就收回。' +
-          (mine ? '你的答案：' + E.label(size, mine.p) : '你還沒作答。');
-      }
-    } else {
-      title = '答案公布（第 ' + q.n + ' 題）';
-      text = groups.length ? '' : '沒有人作答。';
+    if (q && teacher) {
+      title = '答題中';
+      text = '已答 ' + answered.length + (students.length ? ' / ' + students.length : '') + ' 人';
+    } else if (q) {
+      var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
+      title = '老師出題';
+      text = mine ? '你選了 ' + E.label(size, mine.p) + '（可以改）' : '點棋盤選下一手';
     }
     $('quizTitle').textContent = title;
     $('quizText').textContent = text;
     var res = $('quizResults');
     res.textContent = '';
-    if (q && (teacher || q.state === 'shown')) {
+    if (q && teacher) {
       groups.forEach(function (grp) {
         var row = document.createElement('div'), a = document.createElement('b'), names = document.createElement('span');
         a.textContent = E.label(size, grp.p);
@@ -1555,8 +1551,7 @@
       });
     }
     $('btnQuizOpen').hidden = !teacher || !!q;
-    $('quizOpenButtons').hidden = !teacher || !q || q.state !== 'open';
-    $('btnQuizClose').hidden = !teacher || !q || q.state !== 'shown';
+    $('btnQuizClose').hidden = !teacher || !q;
   }
 
   $('handFab').addEventListener('click', function () {
@@ -1567,17 +1562,21 @@
   });
   $('stageList').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-stage]');
+    if (b && isTeacher()) openStudentDialog(b.getAttribute('data-stage'));
+  });
+  $('stuOptions').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-mode]');
     if (!b || !isTeacher()) return;
-    var a = b.getAttribute('data-stage');
+    var a = stuTarget, m = b.getAttribute('data-mode');
+    $('dlgStudent').close();
     act(function (x) {
       if (!x.demo) return false;
-      // 再按一次台上的學生：請他下台，回到老師控制
-      return x.demo.who === 'stage' && x.demo.stage === a ? M.demoSetWho(x, 'teacher') : M.demoSetWho(x, 'stage', a);
-    }).then(function (ok) { if (ok && handUp(a)) net.lowerHand(a); });
+      if (m === 'teacher') return M.demoSetWho(x, 'teacher');
+      if (a === '*') return m === 'stage' ? M.demoSetWho(x, 'free') : M.demoSetWho(x, m, '');
+      return M.demoSetWho(x, m, a);
+    }).then(function (ok) { if (ok && m !== 'teacher' && a !== '*' && handUp(a)) net.lowerHand(a); });
   });
   $('btnQuizOpen').addEventListener('click', function () { act(function (x) { return M.quizOpen(x); }); });
-  $('btnQuizShow').addEventListener('click', function () { act(function (x) { return M.quizShow(x); }); });
-  $('btnQuizCancel').addEventListener('click', function () { act(function (x) { return M.quizClose(x); }); });
   $('btnQuizClose').addEventListener('click', function () { act(function (x) { return M.quizClose(x); }); });
 
   /* ---------- 語音 ---------- */
