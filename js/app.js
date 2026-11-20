@@ -664,7 +664,7 @@
         var s = b.getAttribute('data-step');
         b.disabled = (s === 'first' || parseInt(s, 10) < 0) ? noBack : noFwd;
       });
-      $('teachNav').hidden = !rights.nav || (lecture && dv.total === 0);   // 空白棋盤沒有棋譜可以前後翻
+      $('teachNav').hidden = !rights.nav;   // 空白棋盤也要有：一手一手退回／重擺擺過的變化
       $('btnTeachClear').hidden = !rights.nav;
       $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length && !dm.draw.length;
       $('btnTeachClear').textContent = lecture ? '清除盤面（變化、標記、畫線）' : '結束試下';
