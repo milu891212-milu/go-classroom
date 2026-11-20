@@ -348,6 +348,34 @@ dialog .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-to
 .quiz-results b { color: #2f6fd6; min-width: 3.2em; }
 #quizBox { border-color: #b9cdf0; }
 
+/* ---------- 語音 ---------- */
+.voice-btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.voice-btn.on:hover { background: var(--accent-dark); }
+.voice {
+  position: fixed; z-index: 47;
+  right: 16px; top: calc(var(--topbar) + 8px); width: 320px; max-height: calc(100dvh - var(--topbar) - 24px);
+  display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(60, 40, 10, 0.22); overflow: hidden;
+}
+.voice-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.voice-hint { margin: 0; font-size: 14px; color: var(--accent-dark); }
+.voice-hint:empty { display: none; }
+.voice-hint.warn { color: var(--danger); }
+.voice-all { display: flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.voice-all input { width: 18px; height: 18px; accent-color: var(--accent); }
+.voice-list { display: flex; flex-direction: column; gap: 6px; }
+.voice-row { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; }
+.voice-row .vname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.voice-row .vstate { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.voice-row .vstate.bad { color: var(--danger); }
+.voice-row .vstate.ok { color: #1a7f37; }
+.voice-row .btn { min-height: 30px; padding: 2px 10px; font-size: 13px; }
+.voice-empty { font-size: 14px; color: var(--muted); }
+@media (max-width: 1100px) {
+  .voice { left: 8px; right: 8px; width: auto; }
+}
+
 /* 寬螢幕打開聊天室時，主畫面往左讓出位置 */
 @media (min-width: 1101px) {
   body.chat-open .table, body.chat-open .home, body.chat-open .center { margin-right: 336px; }
@@ -380,4 +408,13 @@ dialog .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-to
 @media (max-width: 1100px) {
   /* 窄螢幕：聊天室從下方拉起，蓋住下半部 */
   .chat { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; height: min(62dvh, 520px); }
+}
+
+/* 手機：頂部按鈕不要折成兩行 */
+@media (max-width: 600px) {
+  .topbar { gap: 6px; padding: 0 8px; }
+  .topbar h1 { font-size: 15px; white-space: nowrap; letter-spacing: 0; }
+  .topbar .btn.small { padding: 4px 8px; white-space: nowrap; }
+  .topbar .tag { display: none; }
+  .whoami { font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 }

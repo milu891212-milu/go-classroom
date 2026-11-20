@@ -21,6 +21,16 @@
  *   lowerHand(account)        老師幫某個學生放下手（請上台後）
  *   watchHands(cb)            cb([{ a: 帳號, t: 舉手時間 }])，先舉手的排前面
  *
+ *   語音（voice.js 用；聲音本身是瀏覽器之間直接傳，這裡只負責交換連線資訊）：
+ *   voiceJoin(pid, info)      宣告自己在語音裡 info = { mic, has }（帳號、身分自動補上）；斷線自動移除
+ *   voiceUpdate(pid, info)    更新自己的麥克風狀態
+ *   voiceLeave(pid)
+ *   watchVoiceMembers(cb)     cb([{ pid, a, r, mic, has }])
+ *   voiceSend(toPid, msg)     送連線資訊給某人 msg = { f: 自己的 pid, k: 'offer'|'answer'|'ice', d: 字串 }
+ *   watchVoiceInbox(pid, cb)  收到給自己的連線資訊就呼叫 cb(msg)（讀完自動刪除）
+ *   setVoiceAllow(account, on)／setVoiceAllowAll(on)  老師開放學生說話
+ *   watchVoiceAllow(cb)       cb({ all: 是否全部開放, accounts: { 帳號鍵: true } })
+ *
  * 有兩種實作：
  *   FirebaseBackend 正式使用。
  *   LocalBackend    測試用，網址加上 ?demo=teacher 或 ?demo=student，同一個瀏覽器的兩個視窗會互相同步。
@@ -42,6 +52,9 @@
   var DEMO_CHAT = 'go-classroom-demo-chat';
   var DEMO_LOCK = 'go-classroom-demo-chatlock';
   var DEMO_HANDS = 'go-classroom-demo-hands';
+  var DEMO_VMEMBER = 'go-classroom-demo-vmember-';   // + pid
+  var DEMO_VMSG = 'go-classroom-demo-vmsg-';         // + 收件人 pid + '-' + 亂數
+  var DEMO_VALLOW = 'go-classroom-demo-vallow';
 
   /* 帳號當成資料庫的鍵時，不能有 . # $ [ ] / 這些字元 */
   function safeKey(account) { return String(account).replace(/[.#$\[\]\/]/g, '_') || '_'; }
@@ -72,12 +85,20 @@
     this.chatCb = null;
     this.lockCb = null;
     this.handsCb = null;
+    this.vMembersCb = null;
+    this.vInbox = null;      // { pid, cb }
+    this.vAllowCb = null;
+    this.vMine = {};         // 自己在語音裡的 pid → info（心跳用）
     this.beat = 0;
+    setInterval(function () { self._voiceBeat(); }, 1500);
     global.addEventListener('storage', function (ev) {
       if (ev.key === DEMO_GAME) self._emitGame();
       else if (ev.key === DEMO_CHAT) self._emitChat();
       else if (ev.key === DEMO_LOCK) self._emitLock();
       else if (ev.key === DEMO_HANDS) self._emitHands();
+      else if (ev.key === DEMO_VALLOW) self._emitAllow();
+      else if (ev.key && ev.key.indexOf(DEMO_VMEMBER) === 0) self._emitMembers();
+      else if (ev.key && ev.key.indexOf(DEMO_VMSG) === 0 && ev.newValue) self._readInbox();
       else if (ev.key && ev.key.indexOf(DEMO_PRESENCE) === 0) self._emitPresence();
     });
     global.addEventListener('pagehide', function () { self._stopPresence(); });
@@ -206,6 +227,110 @@
     setTimeout(function () { self._emitHands(); }, 0);
     return function () { self.handsCb = null; };
   };
+  /* --- 語音（測試模式）：每個成員、每則訊息各用一個 localStorage 鍵，避免互相蓋掉 --- */
+  LocalBackend.prototype._voiceBeat = function () {
+    var self = this, any = false;
+    Object.keys(this.vMine).forEach(function (pid) {
+      any = true;
+      localStorage.setItem(DEMO_VMEMBER + pid, JSON.stringify(self.vMine[pid]));
+    });
+    if (any || this.vMembersCb) this._emitMembers();
+  };
+  LocalBackend.prototype._emitMembers = function () {
+    if (!this.vMembersCb) return;
+    var t = Date.now(), out = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k.indexOf(DEMO_VMEMBER) !== 0) continue;
+      var v;
+      try { v = JSON.parse(localStorage.getItem(k)); } catch (e) { v = null; }
+      // 背景分頁的計時器會被瀏覽器放慢，所以心跳逾時放寬；正常離開時會直接刪掉（voiceLeave）
+      if (!v || t - v.t > 120000) continue;
+      out.push({ pid: k.slice(DEMO_VMEMBER.length), a: v.a, r: v.r, mic: !!v.mic, has: !!v.has });
+    }
+    this.vMembersCb(out);
+  };
+  LocalBackend.prototype.voiceJoin = function (pid, info) {
+    this.vMine[pid] = { a: this.account, r: this.role, mic: !!info.mic, has: !!info.has, t: Date.now() };
+    this._voiceBeat();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.voiceUpdate = function (pid, info) {
+    if (!this.vMine[pid]) return Promise.resolve();
+    this.vMine[pid].mic = !!info.mic;
+    this.vMine[pid].has = !!info.has;
+    this.vMine[pid].t = Date.now();
+    this._voiceBeat();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.voiceLeave = function (pid) {
+    delete this.vMine[pid];
+    localStorage.removeItem(DEMO_VMEMBER + pid);
+    this._emitMembers();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.watchVoiceMembers = function (cb) {
+    var self = this;
+    this.vMembersCb = cb;
+    setTimeout(function () { self._emitMembers(); }, 0);
+    return function () { self.vMembersCb = null; };
+  };
+  LocalBackend.prototype.voiceSend = function (toPid, msg) {
+    localStorage.setItem(DEMO_VMSG + toPid + '-' + Date.now() + Math.random().toString(36).slice(2, 8), JSON.stringify(msg));
+    return Promise.resolve();
+  };
+  LocalBackend.prototype._readInbox = function () {
+    var box = this.vInbox;
+    if (!box) return;
+    var prefix = DEMO_VMSG + box.pid + '-', keys = [], i;
+    for (i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf(prefix) === 0) keys.push(k);
+    }
+    keys.sort();   // 鍵裡有時間，照送出的順序處理
+    keys.forEach(function (k) {
+      var v = localStorage.getItem(k);
+      localStorage.removeItem(k);
+      try { if (v) box.cb(JSON.parse(v)); } catch (e) { /* 忽略壞掉的訊息 */ }
+    });
+  };
+  LocalBackend.prototype.watchVoiceInbox = function (pid, cb) {
+    var self = this;
+    this.vInbox = { pid: pid, cb: cb };
+    setTimeout(function () { self._readInbox(); }, 0);
+    return function () { self.vInbox = null; };
+  };
+  LocalBackend.prototype._allow = function () {
+    try { return JSON.parse(localStorage.getItem(DEMO_VALLOW) || '{}'); } catch (e) { return {}; }
+  };
+  LocalBackend.prototype._emitAllow = function () {
+    if (!this.vAllowCb) return;
+    var a = this._allow();
+    this.vAllowCb({ all: !!a.all, accounts: a.accounts || {} });
+  };
+  LocalBackend.prototype.setVoiceAllow = function (account, on) {
+    var a = this._allow();
+    a.accounts = a.accounts || {};
+    if (on) a.accounts[safeKey(account)] = true; else delete a.accounts[safeKey(account)];
+    localStorage.setItem(DEMO_VALLOW, JSON.stringify(a));
+    this._emitAllow();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.setVoiceAllowAll = function (on) {
+    var a = this._allow();
+    a.all = !!on;
+    if (!on) a.accounts = {};   // 關掉「全部開放」時，個別開放的也一起收回
+    localStorage.setItem(DEMO_VALLOW, JSON.stringify(a));
+    this._emitAllow();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.watchVoiceAllow = function (cb) {
+    var self = this;
+    this.vAllowCb = cb;
+    setTimeout(function () { self._emitAllow(); }, 0);
+    return function () { self.vAllowCb = null; };
+  };
+
   LocalBackend.prototype.setChatLock = function (on) {
     if (on) localStorage.setItem(DEMO_LOCK, '1'); else localStorage.removeItem(DEMO_LOCK);
     this._emitLock();
@@ -450,6 +575,61 @@
     return this.room.child('hands/' + safeKey(account)).remove();
   };
 
+  /* --- 語音 --- */
+  FirebaseBackend.prototype.voiceJoin = function (pid, info) {
+    var member = this.room.child('voice/members/' + pid), inbox = this.room.child('voice/signal/' + pid);
+    member.onDisconnect().remove();
+    inbox.onDisconnect().remove();
+    return member.set({ a: this.user.account, r: this.user.role, mic: !!info.mic, has: !!info.has, t: this.now() });
+  };
+  FirebaseBackend.prototype.voiceUpdate = function (pid, info) {
+    return this.room.child('voice/members/' + pid).update({ mic: !!info.mic, has: !!info.has });
+  };
+  FirebaseBackend.prototype.voiceLeave = function (pid) {
+    var v = this.room.child('voice'), del = {};
+    del['members/' + pid] = null;
+    del['signal/' + pid] = null;
+    return v.update(del);
+  };
+  FirebaseBackend.prototype.watchVoiceMembers = function (cb) {
+    var ref = this.room.child('voice/members');
+    var handler = ref.on('value', function (s) {
+      var out = [];
+      s.forEach(function (c) {
+        var v = c.val();
+        if (v && v.a) out.push({ pid: c.key, a: v.a, r: v.r, mic: !!v.mic, has: !!v.has });
+      });
+      cb(out);
+    }, noop);
+    return function () { ref.off('value', handler); };
+  };
+  FirebaseBackend.prototype.voiceSend = function (toPid, msg) {
+    return this.room.child('voice/signal/' + toPid).push(msg);
+  };
+  FirebaseBackend.prototype.watchVoiceInbox = function (pid, cb) {
+    var ref = this.room.child('voice/signal/' + pid);
+    var handler = ref.on('child_added', function (s) {
+      var v = s.val();
+      s.ref.remove().then(noop, noop);
+      if (v) cb(v);
+    }, noop);
+    return function () { ref.off('child_added', handler); };
+  };
+  FirebaseBackend.prototype.setVoiceAllow = function (account, on) {
+    return this.room.child('voice/allow/accounts/' + safeKey(account)).set(on ? true : null);
+  };
+  FirebaseBackend.prototype.setVoiceAllowAll = function (on) {
+    return this.room.child('voice/allow').set(on ? { all: true } : null);
+  };
+  FirebaseBackend.prototype.watchVoiceAllow = function (cb) {
+    var ref = this.room.child('voice/allow');
+    var handler = ref.on('value', function (s) {
+      var v = s.val() || {};
+      cb({ all: !!v.all, accounts: v.accounts || {} });
+    }, noop);
+    return function () { ref.off('value', handler); };
+  };
+
   FirebaseBackend.prototype.watchHands = function (cb) {
     var ref = this.room.child('hands');
     var handler = ref.on('value', function (s) { cb(sortHands(s.val())); }, noop);
@@ -460,6 +640,7 @@
 
   Go.Net = {
     seatOf: seatOf,
+    safeKey: safeKey,
     /* 回傳連線物件；沒有設定 Firebase、也不是測試模式時回傳 null（純單機） */
     create: function (cfg, search) {
       var m = /[?&]demo=(teacher|student)\b/.exec(search || '');

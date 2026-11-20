@@ -1352,6 +1352,7 @@
         hands = [];
         handsSeen = null;
         stopWatching.push(net.watchHands(onHands));
+        startVoice(user);
         net.onConnection(function (c) {
           connected = c;
           $('connTag').hidden = !(online() && !connected);
@@ -1360,6 +1361,8 @@
       } else {
         state.mode = solo ? 'home' : 'login';
         resetChat();
+        voice = null;
+        voiceOpen = false;
       }
       render();
     });
@@ -1402,7 +1405,9 @@
   $('btnLogout').addEventListener('click', function () {
     // 登出前先把手放下（登出後就沒有權限改了）
     var lower = online() && !isTeacher() && handUp(session.account) ? net.setHand(false) : null;
-    Promise.resolve(lower).then(null, function () {}).then(function () { net.signOut(); });
+    var quit = voice ? voice.leave() : null;   // 先離開語音（登出後就沒有權限改了）
+    Promise.all([lower, quit].map(function (p) { return Promise.resolve(p).then(null, function () {}); }))
+      .then(function () { net.signOut(); });
   });
 
   /* ---------- 舉手、上台、一起答題 ---------- */
@@ -1575,6 +1580,144 @@
   $('btnQuizCancel').addEventListener('click', function () { act(function (x) { return M.quizClose(x); }); });
   $('btnQuizClose').addEventListener('click', function () { act(function (x) { return M.quizClose(x); }); });
 
+  /* ---------- 語音 ---------- */
+  var voice = null;          // Go.Voice，登入後建立
+  var voiceOpen = false;     // 語音面板是否打開
+  var voiceSeen = { canSpeak: null, teacherIn: null };   // 用來判斷狀態「剛改變」以跳出提示
+
+  function startVoice(user) {
+    var cfg = window.GO_CONFIG || {};
+    voice = new Go.Voice(net, { account: user.account, role: user.role }, {
+      iceServers: cfg.voice && cfg.voice.iceServers,
+      fakeMic: net.kind === 'demo' && /[?&]fakemic=1\b/.test(location.search)   // 測試模式：用假的聲音代替麥克風
+    });
+    voiceSeen = { canSpeak: null, teacherIn: null };
+    voice.onChange = renderVoice;
+    voice.start();
+    var v = voice;
+    stopWatching.push(function () { v.stop(); });
+  }
+
+  function voiceName(m) {
+    return (m.r === 'teacher' ? '老師' : m.a) + (voice && m.pid === voice.pid ? '（你）' : '');
+  }
+
+  function renderVoice() {
+    var show = online() && state.mode !== 'login' && !!voice;
+    $('btnVoice').hidden = !show;
+    $('voicePanel').hidden = !show || !voiceOpen;
+    if (!show) return;
+    var v = voice, teacher = isTeacher(), members = v.members.slice();
+    members.sort(function (a, b) {
+      if (a.r !== b.r) return a.r === 'teacher' ? -1 : 1;
+      return String(a.a).localeCompare(String(b.a));
+    });
+    var teacherIn = members.some(function (m) { return m.r === 'teacher'; });
+
+    // 狀態剛改變時的提示
+    var can = v.canSpeak();
+    if (!teacher && v.joined && voiceSeen.canSpeak !== null && can !== voiceSeen.canSpeak) {
+      Sound.notice();
+      toast(can ? '老師開放你說話了 🎤' : '老師關閉了你的麥克風');
+    }
+    voiceSeen.canSpeak = v.joined ? can : null;
+    if (!teacher && !v.joined && teacherIn && voiceSeen.teacherIn === false) {
+      Sound.notice();
+      toast('老師開了語音，按上方「🎧 語音」加入');
+    }
+    voiceSeen.teacherIn = teacherIn;
+
+    var btn = $('btnVoice');
+    btn.classList.toggle('on', v.joined);
+    btn.textContent = v.joined ? (v.speaking() ? '🎙️ 語音中' : '🎧 語音中')
+      : '🎧 語音' + (members.length ? '（' + members.length + '）' : '');
+    $('voiceState').textContent = v.joining ? '加入中…' : v.joined ? '已加入' : '尚未加入';
+    $('btnVoiceJoin').hidden = v.joined;
+    $('btnVoiceJoin').disabled = v.joining;
+    $('btnVoiceJoin').textContent = v.joining ? '加入中…' : '加入語音';
+    $('btnVoiceLeave').hidden = !v.joined;
+    $('btnMic').hidden = !v.joined || !v.stream;
+    $('btnMic').textContent = v.micOn ? '🎤 我的麥克風：開（按一下關掉）' : '🔇 我的麥克風：關（按一下打開）';
+    $('btnMic').classList.toggle('on', v.micOn && can);
+
+    var hint = $('voiceHint'), warn = false, text = '';
+    if (v.micError) { text = v.micError; warn = true; }
+    else if (!v.joined) text = teacherIn ? '老師在語音裡，按「加入語音」就聽得到。' : '加入語音後就能和大家說話。';
+    else if (!teacher && !can) text = '老師還沒開放你說話，你聽得到大家。想說話可以先舉手。';
+    else if (!teacher && can) text = v.micOn ? '老師開放你說話了，大家聽得到你。' : '老師開放你說話了，打開麥克風就能說。';
+    hint.textContent = text;
+    hint.classList.toggle('warn', warn);
+
+    $('voiceAllRow').hidden = !teacher;
+    $('voiceAllowAll').checked = v.allow.all;
+
+    var list = $('voiceList');
+    list.textContent = '';
+    if (!members.length) {
+      var empty = document.createElement('div');
+      empty.className = 'voice-empty';
+      empty.textContent = '目前沒有人在語音裡';
+      list.appendChild(empty);
+    }
+    members.forEach(function (m) {
+      var row = document.createElement('div'), name = document.createElement('span'), st = document.createElement('span');
+      row.className = 'voice-row';
+      var talking = m.has && m.mic && v.allowed(m.a, m.r);
+      name.className = 'vname';
+      name.textContent = (talking ? '🎤 ' : '🔇 ') + voiceName(m);
+      st.className = 'vstate';
+      if (m.pid === v.pid) {
+        st.textContent = m.has ? '' : '沒有麥克風';
+      } else if (v.joined) {
+        var ps = v.peerState(m.pid);
+        st.textContent = ps === 'connected' ? '已連線' : ps === 'failed' ? '連不上' : '連線中…';
+        st.classList.add(ps === 'connected' ? 'ok' : ps === 'failed' ? 'bad' : 'wait');
+      }
+      if (!m.has && m.pid !== v.pid) st.textContent = (st.textContent ? st.textContent + '・' : '') + '只聽';
+      row.appendChild(name);
+      row.appendChild(st);
+      if (teacher && m.r === 'student') {
+        var b = document.createElement('button'), allowedNow = v.allowed(m.a, m.r);
+        b.type = 'button';
+        b.className = 'btn' + (allowedNow ? ' on' : '');
+        b.textContent = v.allow.all ? '全部開放中' : allowedNow ? '關閉說話' : '開放說話';
+        b.disabled = v.allow.all;
+        b.setAttribute('data-allow', m.a);
+        b.setAttribute('data-on', allowedNow ? '0' : '1');
+        row.appendChild(b);
+      }
+      list.appendChild(row);
+    });
+  }
+
+  $('btnVoice').addEventListener('click', function () {
+    voiceOpen = !voiceOpen;
+    renderVoice();
+  });
+  $('voiceClose').addEventListener('click', function () {
+    voiceOpen = false;
+    renderVoice();
+  });
+  $('btnVoiceJoin').addEventListener('click', function () { if (voice) voice.join(); });
+  $('btnVoiceLeave').addEventListener('click', function () { if (voice) voice.leave(); });
+  $('btnMic').addEventListener('click', function () { if (voice) voice.setMic(!voice.micOn); });
+  $('voiceAllowAll').addEventListener('change', function () {
+    if (!isTeacher()) return;
+    var on = this.checked;
+    net.setVoiceAllowAll(on).then(function () {
+      toast(on ? '全部學生都可以說話' : '已關閉所有學生的麥克風');
+    }, function () { toast('連線有問題，沒有設定成功'); });
+  });
+  $('voiceList').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-allow]');
+    if (!b || !isTeacher()) return;
+    net.setVoiceAllow(b.getAttribute('data-allow'), b.getAttribute('data-on') === '1')
+      .then(null, function () { toast('連線有問題，沒有設定成功'); });
+  });
+  // 瀏覽器擋掉自動播放時，點一下畫面就恢復聲音
+  document.addEventListener('pointerdown', function () { if (voice) voice.resumeAudio(); }, true);
+  window.addEventListener('pagehide', function () { if (voice) voice.leave(); });
+
   /* ---------- 聊天室 ---------- */
   var QUICK = {
     teacher: ['好的', '很好！', '再想想看', '注意看這裡', '換你擺擺看', '有問題嗎？', '休息一下', '下課囉，再見'],
@@ -1649,6 +1792,7 @@
 
   function renderChat() {
     renderHand();
+    renderVoice();
     var show = online() && state.mode !== 'login';
     $('chatFab').hidden = !show || chat.open;
     $('chatPanel').hidden = !show || !chat.open;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=15">
+<link rel="stylesheet" href="css/style.css?v=16">
 </head>
 <body>
 
@@ -14,6 +14,7 @@
   <span class="tag warn" id="connTag" hidden>連線中斷，重新連線中…</span>
   <span class="spacer"></span>
   <span class="whoami" id="who" hidden></span>
+  <button class="btn small voice-btn" id="btnVoice" hidden>🎧 語音</button>
   <button class="btn small" id="btnHome" hidden>回首頁</button>
   <button class="btn small" id="btnLogin" hidden>登入</button>
   <button class="btn small" id="btnLogout" hidden>登出</button>
@@ -418,17 +419,37 @@
   </form>
 </aside>
 
+<!-- 語音 -->
+<aside class="voice" id="voicePanel" hidden aria-label="語音">
+  <header class="chat-head">
+    <b>語音</b>
+    <span class="chat-count" id="voiceState"></span>
+    <span class="spacer"></span>
+    <button class="btn small" id="voiceClose" aria-label="收起語音">收起</button>
+  </header>
+  <div class="voice-body">
+    <button class="btn primary wide" id="btnVoiceJoin">加入語音</button>
+    <button class="btn wide" id="btnMic" hidden></button>
+    <p class="voice-hint" id="voiceHint"></p>
+    <label class="voice-all" id="voiceAllRow" hidden><input type="checkbox" id="voiceAllowAll"> 全部學生都可以說話</label>
+    <div class="voice-list" id="voiceList"></div>
+    <button class="btn wide" id="btnVoiceLeave" hidden>離開語音</button>
+    <p class="hint">建議戴耳機，避免回音。按「收起」只是收起這個面板，語音會繼續。</p>
+  </div>
+</aside>
+
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=15"></script>
-<script src="js/engine.js?v=15"></script>
-<script src="js/sgf.js?v=15"></script>
-<script src="js/game.js?v=15"></script>
-<script src="js/match.js?v=15"></script>
-<script src="js/sound.js?v=15"></script>
-<script src="js/net.js?v=15"></script>
-<script src="js/board-view.js?v=15"></script>
-<script src="js/app.js?v=15"></script>
+<script src="js/config.js?v=16"></script>
+<script src="js/engine.js?v=16"></script>
+<script src="js/sgf.js?v=16"></script>
+<script src="js/game.js?v=16"></script>
+<script src="js/match.js?v=16"></script>
+<script src="js/sound.js?v=16"></script>
+<script src="js/net.js?v=16"></script>
+<script src="js/voice.js?v=16"></script>
+<script src="js/board-view.js?v=16"></script>
+<script src="js/app.js?v=16"></script>
 </body>
 </html>

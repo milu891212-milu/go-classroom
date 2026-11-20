@@ -24,6 +24,12 @@ window.GO_CONFIG = {
   // 教室分配：每間教室一位老師配幾個學生帳號，不同教室互相看不到對方的棋，可以同時上課。
   // 沒有列在這裡的帳號登入時會被擋下。
   // 改了這裡，database.rules.json 也要跟著改（每間教室列出同樣的帳號），再貼到 Firebase 後台發布。
+  // 語音連線用的伺服器。預設只用 Google 的免費 STUN；如果有學生的網路（例如部分手機 4G）一直「連不上」，
+  // 可以在這裡加一組 TURN 轉接伺服器，例如 { urls: 'turn:主機:3478', username: '帳號', credential: '密碼' }。
+  voice: {
+    iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }]
+  },
+
   rooms: [
     { id: 'main',  teacher: 'teacher',  students: ['student1'] },
     { id: 'room2', teacher: 'teacher2', students: ['student2'] }
