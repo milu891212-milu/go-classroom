@@ -10,12 +10,18 @@
  *   setGame(game)             直接覆寫整盤對局（開新局、結束對局用）
  *   updateGame(fn)            以最新資料為準修改對局：fn(目前資料) 回傳新資料，回傳 undefined 則放棄
  *   setPresence(role)         宣告自己在線上
- *   watchPresence(cb)         cb({ teacher: 是否在線, student: 是否在線 })
+ *   watchPresence(cb)         cb({ teacher: 是否在線, student: 是否在線, people: [{ account, role }] })
  *   onConnection(cb)          cb(是否連線中)
+ *   watchChat(cb)             聊天室最近的訊息有變動就呼叫 cb([{ id, a: 帳號, r: 身分, k: 種類, x: 內容, t: 時間 }])
+ *   sendChat(msg)             送出一則訊息 { k: 'text'|'quick'|'sticker', x }（帳號、身分、時間自動補上）
+ *   clearChat()               清空聊天室（老師）
+ *   watchChatLock(cb)         cb(學生是否被禁止發言)
+ *   setChatLock(on)           老師開關「學生禁言」
  *
  * 有兩種實作：
  *   FirebaseBackend 正式使用。
  *   LocalBackend    測試用，網址加上 ?demo=teacher 或 ?demo=student，同一個瀏覽器的兩個視窗會互相同步。
+ *                   多個學生可以再加 &as=名字，例如 ?demo=student&as=小明。
  */
 (function (global) {
   'use strict';
@@ -30,17 +36,34 @@
 
   var DEMO_GAME = 'go-classroom-demo-game';
   var DEMO_PRESENCE = 'go-classroom-demo-presence-';
+  var DEMO_CHAT = 'go-classroom-demo-chat';
+  var DEMO_LOCK = 'go-classroom-demo-chatlock';
+  var CHAT_KEEP = 100;      // 聊天室只保留、只顯示最近這麼多則
+  var CHAT_MAX_LEN = 200;   // 一則訊息最多幾個字
 
-  function LocalBackend(role) {
+  /* 整理要送出的訊息 */
+  function chatMessage(user, msg, t) {
+    var k = msg && (msg.k === 'quick' || msg.k === 'sticker') ? msg.k : 'text';
+    var x = String((msg && msg.x) || '').trim().slice(0, CHAT_MAX_LEN);
+    if (!x) return null;
+    return { a: user.account, r: user.role, k: k, x: x, t: t };
+  }
+
+  function LocalBackend(role, name) {
     var self = this;
     this.kind = 'demo';
     this.role = role;
+    this.account = role === 'teacher' ? '老師（測試）' : (name ? String(name).slice(0, 12) : '學生（測試）');
     this.ready = Promise.resolve();
     this.gameCb = null;
     this.presenceCb = null;
+    this.chatCb = null;
+    this.lockCb = null;
     this.beat = 0;
     global.addEventListener('storage', function (ev) {
       if (ev.key === DEMO_GAME) self._emitGame();
+      else if (ev.key === DEMO_CHAT) self._emitChat();
+      else if (ev.key === DEMO_LOCK) self._emitLock();
       else if (ev.key && ev.key.indexOf(DEMO_PRESENCE) === 0) self._emitPresence();
     });
     global.addEventListener('pagehide', function () { self._stopPresence(); });
@@ -56,20 +79,26 @@
   LocalBackend.prototype._emitGame = function () { if (this.gameCb) this.gameCb(this._read()); };
   LocalBackend.prototype._emitPresence = function () {
     if (!this.presenceCb) return;
-    var t = Date.now();
-    function alive(role) { return t - (parseInt(localStorage.getItem(DEMO_PRESENCE + role), 10) || 0) < 4000; }
-    this.presenceCb({ teacher: alive('teacher'), student: alive('student') });
+    var t = Date.now(), out = { teacher: false, student: false, people: [] };
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k.indexOf(DEMO_PRESENCE) !== 0) continue;
+      var v;
+      try { v = JSON.parse(localStorage.getItem(k)); } catch (e) { v = null; }
+      if (!v || !v.role || t - v.t > 4000) continue;
+      out[v.role] = true;
+      out.people.push({ account: v.account, role: v.role });
+    }
+    this.presenceCb(out);
   };
   LocalBackend.prototype._stopPresence = function () {
     clearInterval(this.beat);
     this.beat = 0;
-    try { localStorage.removeItem(DEMO_PRESENCE + this.role); } catch (e) { /* 忽略 */ }
+    try { localStorage.removeItem(DEMO_PRESENCE + this.account); } catch (e) { /* 忽略 */ }
   };
   LocalBackend.prototype.onAuth = function (cb) {
-    var role = this.role;
-    setTimeout(function () {
-      cb({ account: role === 'teacher' ? '老師（測試）' : '學生（測試）', role: role });
-    }, 0);
+    var user = { account: this.account, role: this.role };
+    setTimeout(function () { cb(user); }, 0);
   };
   LocalBackend.prototype.signIn = function () { return Promise.resolve(); };
   LocalBackend.prototype.signOut = function () {
@@ -97,7 +126,7 @@
   LocalBackend.prototype.setPresence = function (role) {
     var self = this;
     function beat() {
-      localStorage.setItem(DEMO_PRESENCE + role, String(Date.now()));
+      localStorage.setItem(DEMO_PRESENCE + self.account, JSON.stringify({ role: role, account: self.account, t: Date.now() }));
       self._emitPresence();
     }
     clearInterval(this.beat);
@@ -111,6 +140,43 @@
     return function () { self.presenceCb = null; };
   };
   LocalBackend.prototype.onConnection = function (cb) { cb(true); };
+  LocalBackend.prototype._chat = function () {
+    try { return JSON.parse(localStorage.getItem(DEMO_CHAT) || '[]'); } catch (e) { return []; }
+  };
+  LocalBackend.prototype._emitChat = function () { if (this.chatCb) this.chatCb(this._chat()); };
+  LocalBackend.prototype._emitLock = function () { if (this.lockCb) this.lockCb(localStorage.getItem(DEMO_LOCK) === '1'); };
+  LocalBackend.prototype.watchChat = function (cb) {
+    var self = this;
+    this.chatCb = cb;
+    setTimeout(function () { self._emitChat(); }, 0);
+    return function () { self.chatCb = null; };
+  };
+  LocalBackend.prototype.sendChat = function (msg) {
+    var m = chatMessage({ account: this.account, role: this.role }, msg, Date.now());
+    if (!m) return Promise.resolve();
+    var list = this._chat();
+    m.id = String(Date.now()) + Math.random().toString(36).slice(2, 6);
+    list.push(m);
+    localStorage.setItem(DEMO_CHAT, JSON.stringify(list.slice(-CHAT_KEEP)));
+    this._emitChat();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.clearChat = function () {
+    localStorage.removeItem(DEMO_CHAT);
+    this._emitChat();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.watchChatLock = function (cb) {
+    var self = this;
+    this.lockCb = cb;
+    setTimeout(function () { self._emitLock(); }, 0);
+    return function () { self.lockCb = null; };
+  };
+  LocalBackend.prototype.setChatLock = function (on) {
+    if (on) localStorage.setItem(DEMO_LOCK, '1'); else localStorage.removeItem(DEMO_LOCK);
+    this._emitLock();
+    return Promise.resolve();
+  };
 
   /* ================= Firebase ================= */
 
@@ -266,7 +332,7 @@
     if (!this.presenceRole || !this.connected || !this.user) return;
     if (!this.presenceRef) this.presenceRef = this.room.child('presence').push();
     this.presenceRef.onDisconnect().remove();
-    this.presenceRef.set({ role: this.presenceRole }).then(noop, noop);
+    this.presenceRef.set({ role: this.presenceRole, account: this.user.account }).then(noop, noop);
   };
 
   FirebaseBackend.prototype.setPresence = function (role) {
@@ -277,10 +343,15 @@
   FirebaseBackend.prototype.watchPresence = function (cb) {
     var ref = this.room.child('presence');
     var handler = ref.on('value', function (s) {
-      var all = s.val() || {}, out = { teacher: false, student: false };
+      var all = s.val() || {}, out = { teacher: false, student: false, people: [] }, seen = {};
       Object.keys(all).forEach(function (k) {
-        var role = all[k] && all[k].role;
-        if (role === 'teacher' || role === 'student') out[role] = true;
+        var role = all[k] && all[k].role, account = (all[k] && all[k].account) || '';
+        if (role !== 'teacher' && role !== 'student') return;
+        out[role] = true;
+        // 同一個帳號開了兩個視窗只算一次
+        if (seen[account + '|' + role]) return;
+        seen[account + '|' + role] = true;
+        out.people.push({ account: account, role: role });
       });
       cb(out);
     }, noop);
@@ -292,6 +363,48 @@
     cb(this.connected);
   };
 
+  FirebaseBackend.prototype.watchChat = function (cb) {
+    var ref = this.room.child('chat').limitToLast(CHAT_KEEP);
+    var handler = ref.on('value', function (s) {
+      var list = [];
+      s.forEach(function (c) {
+        var v = c.val();
+        if (v && v.x) { v.id = c.key; list.push(v); }
+      });
+      cb(list);
+    }, noop);
+    return function () { ref.off('value', handler); };
+  };
+
+  FirebaseBackend.prototype.sendChat = function (msg) {
+    var m = chatMessage(this.user, msg, this.now());
+    if (!m) return Promise.resolve();
+    var ref = this.room.child('chat');
+    return ref.push(m).then(function () {
+      // 只留最近 CHAT_KEEP 則，舊的刪掉（資料庫不會越積越多）
+      return ref.once('value').then(function (s) {
+        var keys = [];
+        s.forEach(function (c) { keys.push(c.key); });
+        if (keys.length <= CHAT_KEEP + 20) return;
+        var del = {};
+        keys.slice(0, keys.length - CHAT_KEEP).forEach(function (k) { del[k] = null; });
+        return ref.update(del);
+      }).then(noop, noop);
+    });
+  };
+
+  FirebaseBackend.prototype.clearChat = function () { return this.room.child('chat').remove(); };
+
+  FirebaseBackend.prototype.watchChatLock = function (cb) {
+    var ref = this.room.child('chatLock');
+    var handler = ref.on('value', function (s) { cb(!!s.val()); }, noop);
+    return function () { ref.off('value', handler); };
+  };
+
+  FirebaseBackend.prototype.setChatLock = function (on) {
+    return this.room.child('chatLock').set(on ? true : null);
+  };
+
   /* ================= 選擇要用哪一種 ================= */
 
   Go.Net = {
@@ -299,7 +412,8 @@
     /* 回傳連線物件；沒有設定 Firebase、也不是測試模式時回傳 null（純單機） */
     create: function (cfg, search) {
       var m = /[?&]demo=(teacher|student)\b/.exec(search || '');
-      if (m) return new LocalBackend(m[1]);
+      var as = /[?&]as=([^&]*)/.exec(search || '');
+      if (m) return new LocalBackend(m[1], as ? decodeURIComponent(as[1]) : '');
       if (cfg && cfg.firebase && cfg.firebase.apiKey) return new FirebaseBackend(cfg);
       return null;
     }

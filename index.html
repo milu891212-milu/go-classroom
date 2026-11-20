@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=13">
+<link rel="stylesheet" href="css/style.css?v=14">
 </head>
 <body>
 
@@ -41,9 +41,9 @@
 <!-- 學生等待畫面 -->
 <main class="center" id="wait" hidden>
   <div class="card narrow">
-    <h3>等待老師開始對局</h3>
+    <h3>等待老師開始上課</h3>
     <p id="waitTeacher"></p>
-    <p class="hint">老師開始對局後，這個畫面會自動切換到棋盤，不需要重新整理。</p>
+    <p class="hint">老師開始對局或開講解房後，這個畫面會自動切換到棋盤，不需要重新整理。等待時可以先按右下角的「聊天」跟老師說話。</p>
   </div>
 </main>
 
@@ -117,6 +117,21 @@
     <input type="file" id="fileInput" accept=".sgf,.SGF,.txt" hidden>
   </section>
 
+  <section class="card" id="lectureCard">
+    <h3>講解房</h3>
+    <p>在棋盤上擺子、試變化、做標記和畫線講解，所有學生同步看到。要講棋譜的話，先載入棋譜，再按「用這個棋譜開講解房」。</p>
+    <label class="field"><span>棋盤</span>
+      <select id="lectureSize">
+        <option value="19">19 路</option>
+        <option value="13">13 路</option>
+        <option value="9">9 路</option>
+      </select>
+    </label>
+    <div class="actions">
+      <button class="btn primary" id="btnLecture">開講解房（空白棋盤）</button>
+    </div>
+  </section>
+
   <section class="card wide-card" id="demoBox" hidden>
     <h3>連線測試模式</h3>
     <p>還沒設定正式連線之前，可以先用這個模式試試老師與學生各自操作的樣子：在同一個瀏覽器開兩個視窗，一個當老師、一個當學生，兩邊的棋盤會即時同步。</p>
@@ -180,6 +195,7 @@
     </div>
     <div class="stack" id="reviewActions">
       <button class="btn primary wide" id="btnStartHere">從這個局面開始對弈</button>
+      <button class="btn wide" id="btnLectureHere">用這個棋譜開講解房</button>
       <button class="btn wide" id="btnOtherFile">載入其他棋譜</button>
     </div>
 
@@ -230,6 +246,15 @@
             <button class="btn small" data-tool="letter" title="字母，依序 A、B、C…">ABC</button>
           </div>
         </div>
+        <div id="teachDrawBox">
+          <div class="teach-title">畫線</div>
+          <div class="tools" id="teachDraw">
+            <button class="btn small" data-tool="pen" title="在棋盤上自由畫線">✎ 畫筆</button>
+            <button class="btn small" data-tool="arrow" title="按住拖曳畫出箭頭">➜ 箭頭</button>
+            <button class="btn small" id="btnUndraw" title="擦掉最後畫的一筆">擦一筆</button>
+            <button class="btn small" id="btnClearDraw" title="擦掉所有畫線">全擦</button>
+          </div>
+        </div>
         <div id="teachWhoBox">
           <div class="teach-title">學生擺棋</div>
           <div class="tools trio" id="teachWho">
@@ -240,6 +265,17 @@
         </div>
         <div class="teach-title" id="teachTurn" hidden></div>
         <button class="btn primary wide" id="btnTeachEnd">結束擺棋，回到對局</button>
+      </div>
+
+      <!-- 講解房：換棋盤或載入棋譜（學生留在房間裡，不用重進） -->
+      <div class="box teach" id="lectureBox" hidden>
+        <div class="teach-title">換一個棋盤</div>
+        <div class="tools trio" id="lectureSizes">
+          <button class="btn small" data-lsize="19">19 路空白</button>
+          <button class="btn small" data-lsize="13">13 路空白</button>
+          <button class="btn small" data-lsize="9">9 路空白</button>
+        </div>
+        <button class="btn wide" id="btnLectureFile">載入棋譜</button>
       </div>
 
       <div class="box" id="scoreBox" hidden>
@@ -335,17 +371,40 @@
   </div>
 </dialog>
 
+<!-- 聊天室 -->
+<button class="chat-fab" id="chatFab" hidden>💬 聊天<span class="badge" id="chatBadge" hidden></span></button>
+<aside class="chat" id="chatPanel" hidden aria-label="聊天室">
+  <header class="chat-head">
+    <b>聊天室</b>
+    <span class="chat-count" id="chatCount"></span>
+    <span class="spacer"></span>
+    <button class="btn small" id="chatClose" aria-label="收起聊天室">收起</button>
+  </header>
+  <div class="chat-people" id="chatPeople"></div>
+  <div class="chat-admin" id="chatAdmin" hidden>
+    <label><input type="checkbox" id="chatLock"> 學生禁言</label>
+    <button class="btn small" id="btnChatClear">清空聊天</button>
+  </div>
+  <div class="chat-list" id="chatList"></div>
+  <div class="chat-quick" id="chatQuick"></div>
+  <div class="chat-stickers" id="chatStickers"></div>
+  <form class="chat-form" id="chatForm" autocomplete="off">
+    <input type="text" id="chatInput" maxlength="200" placeholder="輸入訊息…" enterkeyhint="send">
+    <button class="btn primary" id="chatSend" type="submit">送出</button>
+  </form>
+</aside>
+
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=13"></script>
-<script src="js/engine.js?v=13"></script>
-<script src="js/sgf.js?v=13"></script>
-<script src="js/game.js?v=13"></script>
-<script src="js/match.js?v=13"></script>
-<script src="js/sound.js?v=13"></script>
-<script src="js/net.js?v=13"></script>
-<script src="js/board-view.js?v=13"></script>
-<script src="js/app.js?v=13"></script>
+<script src="js/config.js?v=14"></script>
+<script src="js/engine.js?v=14"></script>
+<script src="js/sgf.js?v=14"></script>
+<script src="js/game.js?v=14"></script>
+<script src="js/match.js?v=14"></script>
+<script src="js/sound.js?v=14"></script>
+<script src="js/net.js?v=14"></script>
+<script src="js/board-view.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>

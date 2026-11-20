@@ -661,7 +661,7 @@
     M.resumePlay(g, 0);
     M.resign(g, W, 0);
     eq(M.startDemo(g, 0), true); eq(g.demo.from, 'finished');
-    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [], who: 'teacher' }, '空的變化與標記會補回來');
+    eq(M.normalize(throughDatabase(g)).demo, { from: 'finished', base: 1, moves: [], undone: [], marks: [], draw: [], who: 'teacher' }, '空的變化與標記會補回來');
     M0.demoBack(g);
     eq(M.normalize(throughDatabase(g)).demo.base, 0, '退到第 0 步也要保留');
     M0.demoForward(g);
@@ -693,6 +693,44 @@
     var old = { teachers: ['teacher'], room: 'main' };
     eq(Go.Net.seatOf(old, 'teacher'), { room: 'main', role: 'teacher' });
     eq(Go.Net.seatOf(old, 'anyone'), { room: 'main', role: 'student' });
+  });
+
+  /* ---------- 講解房與畫線 ---------- */
+  test('講解房：一開始就是擺棋講解，可以前後翻整份棋譜，不能「回到對局」', function () {
+    var rec = S.load('(;GM[1]SZ[9];B[cc];W[gg];B[cg];W[gc])');
+    var g = M0.createLecture(rec, 2);
+    eq(g.lecture, true); eq(g.status, 'demo'); eq(g.demo.from, 'lecture'); eq(g.demo.base, 2); eq(g.clock, null);
+    eq(M0.demoStep(g, -10), true); eq(g.demo.base, 0, '可以退到第 0 手');
+    eq(M0.demoStep(g, 100), true); eq(g.demo.base, 4, '可以進到最後');
+    eq(M0.endDemo(g, T0), false, '講解房不能結束擺棋');
+    var back = M0.normalize(throughDatabase(g));
+    eq(back.lecture, true); eq(back.status, 'demo'); eq(back.demo.from, 'lecture'); eq(back.demo.base, 4);
+  });
+
+  test('講解房：空白棋盤擺子，換棋譜時清掉變化但保留學生權限', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(M0.demoPlay(g, 0, 40), true); eq(M0.demoPlay(g, 0, 41), true);
+    eq(g.demo.moves, [{ c: B, p: 40 }, { c: W, p: 41 }]);
+    M0.demoSetWho(g, 'free');
+    M0.demoDraw(g, { t: 'pen', pts: [1, 2, 3, 4] });
+    eq(M0.lectureLoad(g, G.newRecord({ size: 13 }), 0), true);
+    eq(g.record.size, 13); eq(g.demo.moves, []); eq(g.demo.draw, []); eq(g.demo.who, 'free');
+    var normal = M.create(G.newRecord({ size: 9 }), 0, B, null, 0);
+    eq(M0.lectureLoad(normal, G.newRecord({ size: 13 }), 0), false, '一般對局不能換棋譜');
+  });
+
+  test('畫線：畫一筆、擦一筆、全擦；結束試下也會擦掉；經過資料庫後內容一致', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(M0.demoDraw(g, { t: 'arrow', pts: [10.4, 20, 300, 400] }), true);
+    eq(M0.demoDraw(g, { t: 'pen', pts: [5, 5, 6, 6, 7, 7] }), true);
+    eq(M0.demoDraw(g, { t: 'pen', pts: [5, 5] }), false, '只有一個點不算一筆');
+    eq(g.demo.draw[0], { t: 'arrow', pts: [10, 20, 300, 400] }, '座標取整數');
+    eq(M0.normalize(throughDatabase(g)).demo.draw, g.demo.draw);
+    eq(M0.demoUndraw(g, false), true); eq(g.demo.draw.length, 1);
+    eq(M0.demoUndraw(g, true), true); eq(g.demo.draw.length, 0);
+    eq(M0.demoUndraw(g, true), false, '沒有畫線時不動作');
+    M0.demoDraw(g, { t: 'pen', pts: [1, 1, 2, 2] });
+    eq(M0.demoClear(g), true); eq(g.demo.draw, [], '結束試下一併擦掉');
   });
 
   var pass = results.filter(function (r) { return r.ok; }).length;

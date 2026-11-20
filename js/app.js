@@ -1,5 +1,6 @@
 /*
  * 畫面流程：（登入）→ 首頁 → 棋譜瀏覽 → 對弈（下棋中 → 數目 → 結束）。
+ * 講解房也走「對弈」畫面：它是一盤 lecture = true、一直停在擺棋講解的 game（見 match.js 的 createLecture）。
  *
  * 兩種使用方式共用同一套畫面：
  *   單機：兩人共用一台裝置，黑白都在這個畫面操作。
@@ -18,7 +19,7 @@
   var session = null;        // 已登入：{ account, role: 'teacher' | 'student' }
   var solo = false;          // 有連線設定，但選擇不登入、單機使用
   var connected = true;
-  var presence = { teacher: false, student: false };
+  var presence = { teacher: false, student: false, people: [] };
   var stopWatching = [];
   var loginState = { ready: false, authKnown: false, failed: '' };
 
@@ -72,10 +73,11 @@
     pending: -1,       // 「落子前先確認」時暫定的落點
     hover: -1,
     pos: null,         // 目前畫面上的局面
-    tool: 'alt'        // 老師擺棋時選的工具：alt / b / w（擺子）或 tri / sq / cir / x / letter（標記）
+    tool: 'alt'        // 老師擺棋時選的工具：alt / b / w（擺子）、tri / sq / cir / x / letter（標記）、pen / arrow（畫線）
   };
   var RULE_NAME = { territory: '比目法', area: '數子法' };
   var STONE_TOOL = { alt: 0, b: BLACK, w: WHITE };
+  var DRAW_TOOL = { pen: true, arrow: true };
   /* 這台裝置能不能開始／結束擺棋講解（連線時只有老師；單機都可以） */
   function canTeach() { return !online() || isTeacher(); }
 
@@ -360,9 +362,11 @@
   }
 
   /* 連線：資料庫裡的對局有變動（包含自己剛送出的動作） */
+  var firstGameEvent = true;   // 登入後第一次讀到的對局（重新整理時）不跳「老師開始了」的提示
   function onRemoteGame(raw) {
     var g = M.normalize(raw);
-    var wasPlaying = state.mode === 'play';
+    var wasPlaying = state.mode === 'play', initial = firstGameEvent;
+    firstGameEvent = false;
     if (g) {
       state.game = g;
       if (!wasPlaying) {
@@ -370,11 +374,16 @@
         state.pending = -1;
         byoAnnounced = {};
         beepKey = '';
+        if (!isTeacher() && !initial) {
+          Sound.notice();
+          toast(g.lecture ? '老師開了講解房' : '老師開始了對局');
+        }
       } else {
         effects(state.snap, g);
       }
       state.snap = snapshot(g);
     } else if (wasPlaying) {
+      var wasLecture = state.game && state.game.lecture;
       closeGameDialogs();
       state.game = null;
       state.snap = null;
@@ -384,7 +393,7 @@
         else state.mode = 'home';
       } else {
         state.mode = 'wait';
-        toast('老師結束了這盤對局');
+        toast(wasLecture ? '老師結束了講解' : '老師結束了這盤對局');
       }
     }
     render();
@@ -408,9 +417,11 @@
     $('newSeatRow').hidden = !isTeacher();
     $('startSeatRow').hidden = !isTeacher();
     $('demoBox').hidden = !!net;
+    view.setDrawMode('');   // 畫線模式只在擺棋時由 renderPlay 打開
 
     if (m === 'login') renderLogin();
     renderPresence();
+    renderChat();
     if (!table) { $('modeTag').textContent = ''; return; }
     if (m === 'play') renderPlay(); else renderReview();
     updateClocks();
@@ -425,6 +436,7 @@
 
   function renderPresence() {
     $('waitTeacher').textContent = presence.teacher ? '老師目前在線上。' : '老師目前不在線上。';
+    renderPeople();
     var g = state.game, show = state.mode === 'play' && online() && g && g.teacherColor;
     [[BLACK, 'B'], [WHITE, 'W']].forEach(function (pair) {
       var el = $('pres' + pair[1]);
@@ -512,11 +524,12 @@
     var sc = (scoring || (finished && g.result.reason === 'score')) ? M.score(g) : null;
     var myTurn = playing && controls(g.turn);
 
-    $('modeTag').textContent = playing ? '對弈中' : scoring ? '數目中' : demo ? '擺棋講解' : '對局結束';
+    var lecture = !!g.lecture;
+    $('modeTag').textContent = lecture ? '講解房' : playing ? '對弈中' : scoring ? '數目中' : demo ? '擺棋講解' : '對局結束';
     view.setSize(record.size);
     if (demo) {
       // 變化的棋子一律顯示 1、2、3…，方便講解順序
-      view.render({ board: dv.board, last: dv.last, numbers: dv.numbers, ko: -1, marks: g.demo.marks });
+      view.render({ board: dv.board, last: dv.last, numbers: dv.numbers, ko: -1, marks: g.demo.marks, draw: g.demo.draw });
     } else {
       view.render({
         board: pos.board,
@@ -552,8 +565,12 @@
           : who === 'black' ? '你持黑、老師持白，輪流擺'
           : who === 'white' ? '你持白、老師持黑，輪流擺' : '請看棋盤';
       }
-      setStatus(online() && !teach ? '老師擺棋講解中' : '擺棋講解中',
-        (g.demo.from === 'playing' ? '對局暫停，時間不會走。' : '') + sub);
+      if (lecture) {
+        setStatus(online() && !teach ? '老師講解中' : '講解房', sub);
+      } else {
+        setStatus(online() && !teach ? '老師擺棋講解中' : '擺棋講解中',
+          (g.demo.from === 'playing' ? '對局暫停，時間不會走。' : '') + sub);
+      }
     } else {
       setStatus(g.result.text, '共 ' + pos.moveNo + ' 手');
     }
@@ -581,13 +598,15 @@
     $('btnEnd').hidden = online() && !isTeacher();
     // 匯出 SGF 只在對局結束後（覆盤時）出現，下棋中不需要
     $('btnExport').hidden = !(finished || (demo && g.demo.from === 'finished'));
-    $('btnEnd').textContent = state.source || g.startAt > 0 ? '結束對局，回到棋譜' : '結束對局';
+    $('btnEnd').textContent = lecture ? '結束講解房' : state.source || g.startAt > 0 ? '結束對局，回到棋譜' : '結束對局';
 
     // 老師擺棋講解
     $('btnTeach').hidden = !(teach && (playing || finished));
     $('btnTeach').textContent = playing ? '暫停對局，擺棋講解' : '擺棋講解';
     var teachUi = demo && (rights.nav || rights.stones || rights.marks);
     $('teachBox').hidden = !teachUi;
+    $('lectureBox').hidden = !(lecture && rights.admin);
+    view.setDrawMode(teachUi && DRAW_TOOL[demoTool(g)] ? demoTool(g) : '');
     if (teachUi) {
       var tool = demoTool(g);
       Array.prototype.forEach.call($('teachBox').querySelectorAll('[data-tool]'), function (b) {
@@ -603,18 +622,25 @@
         var s = b.getAttribute('data-step');
         b.disabled = (s === 'first' || parseInt(s, 10) < 0) ? noBack : noFwd;
       });
-      $('teachNav').hidden = !rights.nav;
+      $('teachNav').hidden = !rights.nav || (lecture && dv.total === 0);   // 空白棋盤沒有棋譜可以前後翻
       $('btnTeachClear').hidden = !rights.nav;
-      $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length;
+      $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length && !dm.draw.length;
+      $('btnTeachClear').textContent = lecture ? '清除盤面（變化、標記、畫線）' : '結束試下';
       $('teachStoneBox').hidden = !rights.stones || rights.turns;
       $('teachMarkBox').hidden = !rights.marks;
+      $('teachDrawBox').hidden = !rights.marks;
+      $('btnUndraw').disabled = !dm.draw.length;
+      $('btnClearDraw').disabled = !dm.draw.length;
       $('teachWhoBox').hidden = !(rights.admin && online());
-      $('btnTeachEnd').hidden = !rights.admin;
-      $('teachWhere').textContent = (atEnd ? (dm.from === 'finished' ? '終局的局面' : '暫停時的局面')
+      $('btnTeachEnd').hidden = !rights.admin || lecture;
+      $('teachWhere').textContent = (lecture
+        ? (dv.total === 0 ? '' : dv.base <= 0 ? '棋譜的起始局面' : '棋譜第 ' + dv.pos.moveNo + ' 手')
+        : atEnd ? (dm.from === 'finished' ? '終局的局面' : '暫停時的局面')
         : dv.base <= 0 ? '退回到起始局面'
         : dv.base === start ? '開始下的局面（第 ' + dv.pos.moveNo + ' 手）'
         : '退回到第 ' + dv.pos.moveNo + ' 手') +
-        (dm.moves.length ? '＋變化 ' + dm.moves.length + ' 手' : '');
+        (dm.moves.length ? (lecture && dv.total === 0 ? '擺了 ' : '＋變化 ') + dm.moves.length + ' 手' : '');
+      $('teachWhere').hidden = !$('teachWhere').textContent;
       $('teachTurn').hidden = !rights.turns;
       if (rights.turns) {
         var next = M.demoNextColor(g);
@@ -799,6 +825,28 @@
     render();
   }
 
+  /* 開講解房：record 是空白棋盤或棋譜，cursor 是一開始停在第幾步 */
+  function startLecture(record, cursor) {
+    var game = M.createLecture(G.cloneRecord(record), cursor);
+    state.tool = 'alt';
+    state.returnCursor = cursor || 0;
+    if (online()) {
+      net.setGame(game).then(null, function () { toast('連線有問題，無法開講解房'); });
+      return; // 畫面等資料庫回報後由 onRemoteGame 切換
+    }
+    state.mode = 'play';
+    state.game = game;
+    state.pending = -1;
+    render();
+  }
+
+  /* 講解房中換棋盤或換棋譜：學生不用離開房間 */
+  function lectureReplace(record, cursor) {
+    state.source = record.moves.length || record.setup.b.length || record.setup.w.length ? record : null;
+    state.returnCursor = cursor || 0;
+    act(function (x) { return x.lecture && M.lectureLoad(x, G.cloneRecord(record), cursor); });
+  }
+
   function setCursor(n) {
     var max = state.source.moves.length;
     state.cursor = Math.max(0, Math.min(max, n));
@@ -814,14 +862,22 @@
       toast('無法讀取這個棋譜：' + e.message);
       return false;
     }
+    if (inLecture()) {
+      // 講解房裡載入棋譜：直接換到講解房的棋盤上，從第一手開始講
+      lectureReplace(record, 0);
+      toast('已載入棋譜，共 ' + G.countMoves(record) + ' 手');
+      return true;
+    }
     openReview(record);
     return true;
   }
 
+  function inLecture() { return state.mode === 'play' && state.game && state.game.lecture && canTeach(); }
+
   function loadFile(file) {
     if (!file) return;
     if (state.mode === 'login' || state.mode === 'wait') return; // 學生不能載入棋譜
-    if (state.mode === 'play') { toast('請先結束目前的對局，再載入棋譜'); return; }
+    if (state.mode === 'play' && !inLecture()) { toast('請先結束目前的對局，再載入棋譜'); return; }
     var reader = new FileReader();
     reader.onload = function () { loadText(S.decode(reader.result)); };
     reader.onerror = function () { toast('檔案讀取失敗'); };
@@ -885,6 +941,24 @@
     state.source = null;
     startPlay(record, 0, record.first, newTime.read(), checkedValue('newSeat'), $('newRule').value);
   });
+
+  /* ---------- 講解房 ---------- */
+  $('btnLecture').addEventListener('click', function () {
+    state.source = null;
+    startLecture(G.newRecord({ size: parseInt($('lectureSize').value, 10) }), 0);
+  });
+  $('btnLectureHere').addEventListener('click', function () {
+    startLecture(state.source, state.cursor);
+  });
+  $('lectureSizes').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-lsize]');
+    if (!btn || !inLecture()) return;
+    var size = parseInt(btn.getAttribute('data-lsize'), 10);
+    ask('換成 ' + size + ' 路空白棋盤？', '目前棋盤上的棋子、變化、標記和畫線都會清掉。', '換棋盤').then(function (ok) {
+      if (ok && inLecture()) lectureReplace(G.newRecord({ size: size }), 0);
+    });
+  });
+  $('btnLectureFile').addEventListener('click', function () { $('fileInput').click(); });
 
   /* ---------- 棋譜瀏覽 ---------- */
   document.querySelector('.nav').addEventListener('click', function (ev) {
@@ -1003,6 +1077,11 @@
     state.hover = idx;
     if (state.mode === 'play') updateGhost();
   };
+  /* 畫完一筆畫線 */
+  view.onStroke = function (stroke) {
+    if (state.mode !== 'play' || state.game.status !== 'demo') return;
+    act(function (x) { return demoRights(x).marks && M.demoDraw(x, stroke); });
+  };
 
   $('btnConfirm').addEventListener('click', function () {
     if (state.pending >= 0) doPlay(state.pending);
@@ -1091,6 +1170,12 @@
     var n = { ArrowLeft: -1, ArrowRight: 1, PageUp: -10, PageDown: 10, Home: 'start', End: FAR }[ev.key];
     if (n) { teachStep(n); ev.preventDefault(); }
   });
+  $('btnUndraw').addEventListener('click', function () {
+    act(function (x) { return demoRights(x).marks && M.demoUndraw(x, false); });
+  });
+  $('btnClearDraw').addEventListener('click', function () {
+    act(function (x) { return demoRights(x).marks && M.demoUndraw(x, true); });
+  });
   $('btnTeachClear').addEventListener('click', function () {
     act(function (x) { return demoRights(x).nav && M.demoClear(x); });
   });
@@ -1148,6 +1233,21 @@
   }
 
   function leavePlay(toHome) {
+    if (state.game && state.game.lecture) {
+      ask('結束講解房？', online() ? '學生的畫面會回到「等待老師開始上課」。聊天紀錄會保留。'
+        : '棋盤上擺的變化、標記和畫線不會保留。', '結束講解').then(function (ok) {
+        if (!ok || !state.game || !state.game.lecture) return;
+        if (toHome) state.source = null;
+        if (online()) {
+          net.setGame(null).then(null, function () { toast('連線有問題，無法結束講解房'); });
+        } else if (state.source) {
+          openReview(state.source, state.returnCursor);
+        } else {
+          goHome();
+        }
+      });
+      return;
+    }
     var back = function () {
       var g = state.game, src = toHome ? null : returnSource(g);
       if (online()) {
@@ -1195,6 +1295,10 @@
           net.signOut();
         }));
         stopWatching.push(net.watchPresence(function (p) { presence = p; renderPresence(); }));
+        resetChat();
+        firstGameEvent = true;
+        stopWatching.push(net.watchChat(onChat));
+        stopWatching.push(net.watchChatLock(function (on) { chat.locked = on; renderChat(); }));
         net.onConnection(function (c) {
           connected = c;
           $('connTag').hidden = !(online() && !connected);
@@ -1202,6 +1306,7 @@
         net.setPresence(user.role);
       } else {
         state.mode = solo ? 'home' : 'login';
+        resetChat();
       }
       render();
     });
@@ -1242,6 +1347,202 @@
     render();
   });
   $('btnLogout').addEventListener('click', function () { net.signOut(); });
+
+  /* ---------- 聊天室 ---------- */
+  var QUICK = {
+    teacher: ['好的', '很好！', '再想想看', '注意看這裡', '換你擺擺看', '有問題嗎？', '休息一下', '下課囉，再見'],
+    student: ['好的', '我懂了', '我不懂', '請再講一次', '等我一下', '我有問題', '老師好', '謝謝老師']
+  };
+  var STICKERS = ['👍', '👏', '🌸', '⭐', '💯', '😊', '😮', '❓'];
+  var chat = { list: [], seen: null, open: false, unread: 0, locked: false };
+
+  function resetChat() {
+    chat.list = [];
+    chat.seen = null;
+    chat.unread = 0;
+    chat.locked = false;
+    chat.open = false;
+  }
+  function speaker(m) { return m.r === 'teacher' ? '老師' : m.a; }
+  function isMine(m) { return online() && m.a === session.account && m.r === session.role; }
+  function canChat() { return online() && (isTeacher() || !chat.locked); }
+
+  function clock(t) {
+    var d = new Date(t || 0);
+    return two(d.getHours()) + ':' + two(d.getMinutes());
+  }
+
+  /* 線上名單：老師排第一，學生依帳號排序 */
+  function renderPeople() {
+    var box = $('chatPeople');
+    box.textContent = '';
+    var people = (presence.people || []).slice().sort(function (a, b) {
+      if (a.role !== b.role) return a.role === 'teacher' ? -1 : 1;
+      return String(a.account).localeCompare(String(b.account));
+    });
+    $('chatCount').textContent = people.length ? '在線 ' + people.length + ' 人' : '';
+    if (!people.length) { box.textContent = '目前沒有人在線上'; return; }
+    box.appendChild(document.createTextNode('在線：'));
+    people.forEach(function (p, i) {
+      if (i) box.appendChild(document.createTextNode('、'));
+      var b = document.createElement('b');
+      b.textContent = (p.role === 'teacher' ? '老師' : p.account) +
+        (online() && p.account === session.account && p.role === session.role ? '（你）' : '');
+      box.appendChild(b);
+    });
+  }
+
+  function renderChatList() {
+    var list = $('chatList');
+    var nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+    list.textContent = '';
+    if (!chat.list.length) {
+      var empty = document.createElement('div');
+      empty.className = 'chat-empty';
+      empty.textContent = '還沒有訊息';
+      list.appendChild(empty);
+      return;
+    }
+    chat.list.forEach(function (m) {
+      var row = document.createElement('div');
+      row.className = 'msg ' + (m.r === 'teacher' ? 'teacher' : 'student') + ' ' + m.k + (isMine(m) ? ' mine' : '');
+      var meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = (isMine(m) ? '我' : speaker(m)) + '　' + clock(m.t);
+      var bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = m.x;
+      row.appendChild(meta);
+      row.appendChild(bubble);
+      list.appendChild(row);
+    });
+    if (nearBottom || chat.forceScroll) list.scrollTop = list.scrollHeight;
+    chat.forceScroll = false;
+  }
+
+  function renderChat() {
+    var show = online() && state.mode !== 'login';
+    $('chatFab').hidden = !show || chat.open;
+    $('chatPanel').hidden = !show || !chat.open;
+    document.body.classList.toggle('chat-open', show && chat.open);
+    $('chatBadge').hidden = !chat.unread;
+    $('chatBadge').textContent = chat.unread > 99 ? '99+' : String(chat.unread);
+    if (!show) return;
+    $('chatAdmin').hidden = !isTeacher();
+    $('chatLock').checked = chat.locked;
+    var allowed = canChat();
+    $('chatPanel').classList.toggle('locked', !allowed);
+    $('chatInput').disabled = !allowed;
+    $('chatSend').disabled = !allowed;
+    $('chatInput').placeholder = allowed ? '輸入訊息…' : '老師開啟了禁言，現在不能發言';
+    var role = isTeacher() ? 'teacher' : 'student';
+    if ($('chatQuick').getAttribute('data-role') !== role) {
+      $('chatQuick').setAttribute('data-role', role);
+      $('chatQuick').textContent = '';
+      QUICK[role].forEach(function (text) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn';
+        b.textContent = text;
+        b.setAttribute('data-quick', text);
+        $('chatQuick').appendChild(b);
+      });
+    }
+  }
+
+  /* 貼圖：在每個人的畫面中間跳出來一下 */
+  function popSticker(emoji, from) {
+    var el = document.createElement('div');
+    el.className = 'sticker-pop';
+    var e = document.createElement('div'), f = document.createElement('div');
+    e.className = 'emoji';
+    e.textContent = emoji;
+    f.className = 'from';
+    f.textContent = from;
+    el.appendChild(e);
+    el.appendChild(f);
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 1900);
+  }
+
+  function onChat(list) {
+    var first = chat.seen === null;   // 剛登入時讀到的舊訊息不跳通知
+    if (first) chat.seen = {};
+    var fresh = [];
+    list.forEach(function (m) {
+      if (chat.seen[m.id]) return;
+      chat.seen[m.id] = true;
+      if (!first) fresh.push(m);
+    });
+    chat.list = list;
+    fresh.forEach(function (m) {
+      if (m.k === 'sticker') popSticker(m.x, isMine(m) ? '我' : speaker(m));
+      if (isMine(m)) return;
+      Sound.notice();
+      if (!chat.open) {
+        chat.unread++;
+        if (m.k !== 'sticker') toast(speaker(m) + '：' + m.x);
+      }
+    });
+    renderChatList();
+    renderChat();
+  }
+
+  function sendChat(kind, text) {
+    if (!canChat()) { toast('老師開啟了禁言，現在不能發言'); return; }
+    chat.forceScroll = true;
+    net.sendChat({ k: kind, x: text }).then(null, function () { toast('連線有問題，訊息沒有送出'); });
+  }
+
+  // 第一次載入時把貼圖按鈕放好
+  STICKERS.forEach(function (emoji) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn';
+    b.textContent = emoji;
+    b.setAttribute('data-sticker', emoji);
+    b.title = '送出貼圖';
+    $('chatStickers').appendChild(b);
+  });
+
+  $('chatFab').addEventListener('click', function () {
+    chat.open = true;
+    chat.unread = 0;
+    chat.forceScroll = true;
+    renderChat();
+    renderChatList();
+  });
+  $('chatClose').addEventListener('click', function () {
+    chat.open = false;
+    renderChat();
+  });
+  $('chatForm').addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var text = $('chatInput').value.trim();
+    if (!text) return;
+    $('chatInput').value = '';
+    sendChat('text', text);
+  });
+  $('chatQuick').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-quick]');
+    if (b) sendChat('quick', b.getAttribute('data-quick'));
+  });
+  $('chatStickers').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-sticker]');
+    if (b) sendChat('sticker', b.getAttribute('data-sticker'));
+  });
+  $('chatLock').addEventListener('change', function () {
+    if (!isTeacher()) return;
+    var on = this.checked;
+    net.setChatLock(on).then(function () {
+      toast(on ? '已開啟學生禁言' : '已關閉學生禁言');
+    }, function () { toast('連線有問題，沒有設定成功'); });
+  });
+  $('btnChatClear').addEventListener('click', function () {
+    ask('清空聊天？', '所有人的聊天紀錄都會刪除，無法復原。', '清空').then(function (ok) {
+      if (ok) net.clearChat().then(null, function () { toast('連線有問題，沒有清空'); });
+    });
+  });
 
   /* ---------- 選項 ---------- */
   $('optNumbers').checked = prefs.numbers;

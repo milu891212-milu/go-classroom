@@ -11,19 +11,98 @@
     this.size = 0;
     this.onPoint = null;   // function (idx) 點了某個交叉點
     this.onHover = null;   // function (idx) 滑鼠移到某個交叉點（離開為 -1）
+    this.onStroke = null;  // function ({ t, pts }) 畫完一筆（畫筆模式）
+    this.drawMode = '';    // '' 一般點棋盤；'pen' 畫筆；'arrow' 箭頭
     this._hover = -1;
+    this._stroke = null;   // 正在畫的這一筆
 
     var self = this;
     svg.addEventListener('click', function (ev) {
+      if (self.drawMode) return;   // 畫筆模式不落子
       var idx = self.pointAt(ev);
       if (idx >= 0 && self.onPoint) self.onPoint(idx);
     });
+    svg.addEventListener('pointerdown', function (ev) {
+      if (!self.drawMode || !self.size || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+      ev.preventDefault();
+      var p = self.svgPoint(ev);
+      self._stroke = { t: self.drawMode, pts: [p.x, p.y], id: ev.pointerId };
+      try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* 忽略 */ }
+      self._drawLive();
+    });
     svg.addEventListener('pointermove', function (ev) {
+      var st = self._stroke;
+      if (st && ev.pointerId === st.id) {
+        var p = self.svgPoint(ev), n = st.pts.length;
+        if (st.t === 'arrow') {
+          st.pts = [st.pts[0], st.pts[1], p.x, p.y];
+        } else if (Math.abs(p.x - st.pts[n - 2]) + Math.abs(p.y - st.pts[n - 1]) >= 8) {
+          st.pts.push(p.x, p.y);   // 太近的點略過，線條一樣順，資料小很多
+        }
+        self._drawLive();
+        return;
+      }
       if (ev.pointerType !== 'mouse') return;
-      self._setHover(self.pointAt(ev));
+      self._setHover(self.drawMode ? -1 : self.pointAt(ev));
+    });
+    function finish(ev) {
+      var st = self._stroke;
+      if (!st || ev.pointerId !== st.id) return;
+      self._stroke = null;
+      self.liveLayer.innerHTML = '';
+      var pts = st.pts;
+      if (pts.length === 2) pts = pts.concat([pts[0] + 1, pts[1]]);   // 只點一下：畫一個點
+      var len = Math.abs(pts[pts.length - 2] - pts[0]) + Math.abs(pts[pts.length - 1] - pts[1]);
+      if (st.t === 'arrow' && len < 40) return;   // 箭頭太短當成誤觸
+      if (self.onStroke) self.onStroke({ t: st.t, pts: pts });
+    }
+    svg.addEventListener('pointerup', finish);
+    svg.addEventListener('pointercancel', function (ev) {
+      if (self._stroke && ev.pointerId === self._stroke.id) { self._stroke = null; self.liveLayer.innerHTML = ''; }
     });
     svg.addEventListener('pointerleave', function () { self._setHover(-1); });
   }
+
+  /* 滑鼠／手指位置換成棋盤的 SVG 座標（取整數） */
+  BoardView.prototype.svgPoint = function (ev) {
+    var ctm = this.svg.getScreenCTM(), pt = this.svg.createSVGPoint();
+    pt.x = ev.clientX;
+    pt.y = ev.clientY;
+    var p = ctm ? pt.matrixTransform(ctm.inverse()) : pt;
+    var max = (this.size - 1) * CELL + MARGIN * 2;
+    return { x: Math.round(Math.max(0, Math.min(max, p.x))), y: Math.round(Math.max(0, Math.min(max, p.y))) };
+  };
+
+  BoardView.prototype.setDrawMode = function (mode) {
+    this.drawMode = mode === 'pen' || mode === 'arrow' ? mode : '';
+    this.svg.classList.toggle('drawing', !!this.drawMode);
+    if (!this.drawMode && this._stroke) { this._stroke = null; this.liveLayer.innerHTML = ''; }
+  };
+
+  /* 一筆畫線的 SVG */
+  function strokeSvg(st) {
+    var pts = st.pts, i, h = '';
+    var attr = ' fill="none" stroke="#e5322d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"';
+    if (!pts || pts.length < 4) return '';
+    if (st.t === 'arrow') {
+      var x1 = pts[0], y1 = pts[1], x2 = pts[pts.length - 2], y2 = pts[pts.length - 1];
+      var a = Math.atan2(y2 - y1, x2 - x1), L = 46, W = 0.45;
+      var hx = x2 - Math.cos(a) * L * 0.6, hy = y2 - Math.sin(a) * L * 0.6;
+      h += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + hx + '" y2="' + hy + '"' + attr + '/>';
+      h += '<polygon points="' + x2 + ',' + y2 + ' ' +
+        (x2 - Math.cos(a - W) * L) + ',' + (y2 - Math.sin(a - W) * L) + ' ' +
+        (x2 - Math.cos(a + W) * L) + ',' + (y2 - Math.sin(a + W) * L) +
+        '" fill="#e5322d" opacity="0.85"/>';
+      return h;
+    }
+    var d = 'M' + pts[0] + ' ' + pts[1];
+    for (i = 2; i < pts.length; i += 2) d += 'L' + pts[i] + ' ' + pts[i + 1];
+    return '<path d="' + d + '"' + attr + '/>';
+  }
+
+  BoardView.prototype._drawLive = function () {
+    this.liveLayer.innerHTML = this._stroke ? strokeSvg(this._stroke) : '';
+  };
 
   BoardView.prototype._setHover = function (idx) {
     if (idx === this._hover) return;
@@ -90,17 +169,20 @@
       h += '<text class="coord" x="' + far + '" y="' + a + '">' + num + '</text>';
     }
 
-    h += '<g data-layer="stones"></g><g data-layer="ghost"></g>';
+    h += '<g data-layer="stones"></g><g data-layer="draw" pointer-events="none"></g>' +
+      '<g data-layer="live" pointer-events="none"></g><g data-layer="ghost"></g>';
     this.svg.setAttribute('viewBox', '0 0 ' + total + ' ' + total);
     this.svg.innerHTML = h;
     this.stonesLayer = this.svg.querySelector('[data-layer="stones"]');
     this.ghostLayer = this.svg.querySelector('[data-layer="ghost"]');
+    this.drawLayer = this.svg.querySelector('[data-layer="draw"]');
+    this.liveLayer = this.svg.querySelector('[data-layer="live"]');
   };
 
   /*
    * 畫棋子。opts: { board, last, numbers, ko, dead, owner, marks }
    *   numbers 有給就顯示手數；ko >= 0 會在劫點畫方框。
-   *   marks 是老師擺棋時的標記 [{ p, t }]。
+   *   marks 是老師擺棋時的標記 [{ p, t }]；draw 是畫筆與箭頭 [{ t, pts }]。
    *   dead / owner 是數目用：死子畫成半透明，空點與死子上用小方塊標出是誰的地。
    */
   BoardView.prototype.render = function (opts) {
@@ -150,6 +232,9 @@
       for (idx = 0; idx < opts.marks.length; idx++) h += this._mark(opts.marks[idx], board[opts.marks[idx].p]);
     }
     this.stonesLayer.innerHTML = h;
+    var d = '';
+    if (opts.draw) for (idx = 0; idx < opts.draw.length; idx++) d += strokeSvg(opts.draw[idx]);
+    this.drawLayer.innerHTML = d;
   };
 
   /* 一個標記。t：'tri' 三角形、'sq' 方塊、'cir' 圓圈、'x' 叉，其餘當成文字（A、B、C…） */

@@ -5,8 +5,9 @@
  *     record, startAt, turn,
  *     rule:   'territory'（比目法）或 'area'（數子法）,
  *     status: 'playing' | 'scoring' | 'finished' | 'demo'（老師擺棋講解，對局暫停）,
- *     demo:   null 或 { from:'playing'|'finished', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}],
- *                       who:'teacher'|'free'|'black'|'white' },
+ *     demo:   null 或 { from:'playing'|'finished'|'lecture', base, moves:[{c,p}], undone:[{c,p}], marks:[{p,t}],
+ *                       draw:[{t:'pen'|'arrow', pts:[x,y,x,y…]}], who:'teacher'|'free'|'black'|'white' },
+ *     lecture: true 表示這是講解房（沒有對局，一直停在擺棋講解，見 createLecture）,
  *     clock:  null（不計時）或 { main, byo, periods, left:{b:{main,periods}, w:{...}}, since },
  *     request: null 或 { type:'undo'|'count'|'draw', from },
  *     dead:   [數目時被標為死子的位置],
@@ -407,8 +408,63 @@
       moves: [],                        // 擺的變化
       undone: [],                       // 被「上一手」收回的變化，「下一手」可以再擺回來
       marks: [],
+      draw: [],                         // 畫筆與箭頭（棋盤的 SVG 座標）
       who: 'teacher'   // 誰可以擺：'teacher' 只有老師、'free' 學生控制、'black'／'white' 學生持黑／持白和老師輪流
     };
+    return true;
+  }
+
+  /*
+   * 講解房：不下對局，一開始就是擺棋講解。record 可以是空白棋盤或載入的棋譜，
+   * cursor 是一開始停在棋譜的第幾步（之後可以前後瀏覽整份棋譜）。
+   */
+  function createLecture(record, cursor) {
+    var n = record.moves.length;
+    var game = create(record, 0, G.naturalTurn(record, n), null, 0);
+    game.lecture = true;
+    game.status = 'demo';
+    game.demo = {
+      from: 'lecture',
+      base: Math.max(0, Math.min(n, cursor === undefined ? n : cursor)),
+      moves: [], undone: [], marks: [], draw: [],
+      who: 'teacher'
+    };
+    return game;
+  }
+
+  /* 講解房換一份棋譜（或換成空白棋盤）：變化、標記、畫線都清掉，學生權限保留 */
+  function lectureLoad(game, record, cursor) {
+    if (!game.lecture) return false;
+    var who = game.demo ? game.demo.who : 'teacher';
+    var fresh = createLecture(record, cursor);
+    game.record = fresh.record;
+    game.turn = fresh.turn;
+    game.demo = fresh.demo;
+    game.demo.who = who;
+    return true;
+  }
+
+  var MAX_STROKES = 80, MAX_POINTS = 400;
+
+  /* 畫一筆。stroke = { t:'pen'|'arrow', pts:[x,y,x,y…] }（棋盤的 SVG 座標） */
+  function demoDraw(game, stroke) {
+    if (game.status !== 'demo' || !stroke) return false;
+    var t = stroke.t === 'arrow' ? 'arrow' : 'pen';
+    var pts = (stroke.pts || []).slice(0, MAX_POINTS * 2).map(function (v) { return Math.round(+v || 0); });
+    if (pts.length % 2) pts.pop();
+    if (pts.length < 4) return false;
+    var d = game.demo;
+    d.draw = d.draw || [];
+    d.draw.push({ t: t, pts: pts });
+    if (d.draw.length > MAX_STROKES) d.draw.splice(0, d.draw.length - MAX_STROKES);
+    return true;
+  }
+
+  /* 拿掉畫線：all = true 全部清除，否則只拿掉最後一筆 */
+  function demoUndraw(game, all) {
+    if (game.status !== 'demo' || !game.demo.draw || !game.demo.draw.length) return false;
+    if (all) game.demo.draw = [];
+    else game.demo.draw.pop();
     return true;
   }
 
@@ -543,10 +599,11 @@
   function demoClear(game) {
     if (game.status !== 'demo') return false;
     var d = game.demo;
-    if (!d.moves.length && !d.undone.length && !d.marks.length) return false;
+    if (!d.moves.length && !d.undone.length && !d.marks.length && !(d.draw && d.draw.length)) return false;
     d.moves = [];
     d.undone = [];
     d.marks = [];
+    d.draw = [];
     return true;
   }
 
@@ -563,7 +620,7 @@
 
   /* 結束擺棋：變化與標記全部拿掉，回到原本的對局；對局中的話時鐘從現在繼續走 */
   function endDemo(game, now) {
-    if (game.status !== 'demo') return false;
+    if (game.status !== 'demo' || game.lecture) return false;   // 講解房沒有對局可以回去
     var from = game.demo && game.demo.from === 'finished' && game.result ? 'finished' : 'playing';
     game.status = from;
     game.demo = null;
@@ -614,15 +671,18 @@
     g.result = g.result || null;
     g.teacherColor = g.teacherColor || 0;
     g.rule = g.rule === 'territory' ? 'territory' : 'area';
+    g.lecture = !!g.lecture;
+    if (g.lecture) g.status = 'demo';
     if (g.status === 'demo') {
       var d = g.demo || {};
       var stone = function (m) { return { c: m.c, p: m.p }; };
       g.demo = {
-        from: d.from === 'finished' ? 'finished' : 'playing',
+        from: g.lecture ? 'lecture' : d.from === 'finished' ? 'finished' : 'playing',
         base: typeof d.base === 'number' ? Math.max(0, Math.min(r.moves.length, d.base)) : r.moves.length,
         moves: toArray(d.moves).map(stone),
         undone: toArray(d.undone).map(stone),
         marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; }),
+        draw: toArray(d.draw).map(function (s) { return { t: s.t === 'arrow' ? 'arrow' : 'pen', pts: toArray(s.pts) }; }),
         who: DEMO_WHO[d.who] ? d.who : 'teacher'
       };
     } else {
@@ -652,6 +712,10 @@
     request: request,
     respond: respond,
     startDemo: startDemo,
+    createLecture: createLecture,
+    lectureLoad: lectureLoad,
+    demoDraw: demoDraw,
+    demoUndraw: demoUndraw,
     demoView: demoView,
     demoNextColor: demoNextColor,
     demoPlay: demoPlay,
