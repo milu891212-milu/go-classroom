@@ -58,6 +58,7 @@
   var prefs = {
     numbers: false,
     confirm: false,
+    demoNumbers: true,   // 講解房／擺棋時顯示手數（跟對局的 numbers 分開記，預設打開）
     sound: true,
     rule: 'territory',   // 上次選的數目方式：'territory' 比目法、'area' 數子法
     time: { preset: '300,30,3', main: 20, byo: 30, periods: 3 }
@@ -66,6 +67,7 @@
     var saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
     if (saved.rule === 'area') prefs.rule = 'area';
     prefs.numbers = !!saved.numbers;
+    if (saved.demoNumbers === false) prefs.demoNumbers = false;
     prefs.confirm = !!saved.confirm;
     if (saved.sound === false) prefs.sound = false;
     if (saved.time && typeof saved.time.preset === 'string') {
@@ -568,6 +570,7 @@
 
     view.setSize(record.size);
     view.render({ board: pos.board, last: pos.last, numbers: prefs.numbers ? pos.numbers : null, ko: -1 });
+    $('optNumbers').checked = prefs.numbers;
     view.setGhost(-1);
     $('board').classList.remove('playing', 'scoring');
 
@@ -607,11 +610,12 @@
     var myTurn = playing && controls(g.turn);
 
     var lecture = !!g.lecture;
+    $('optNumbers').checked = demo ? prefs.demoNumbers : prefs.numbers;
     $('modeTag').textContent = lecture ? '講解房' : isWatcher() && !demo ? '觀戰中' : playing ? '對弈中' : scoring ? '數目中' : demo ? '擺棋講解' : '對局結束';
     view.setSize(record.size);
     if (demo) {
       // 變化的棋子一律顯示 1、2、3…，方便講解順序
-      var shown = answerBoard(g, dv);
+      var shown = answerBoard(g, dv, demoNumbers(g, dv));
       view.render({ board: shown.board, last: shown.last, numbers: shown.numbers, ko: -1, marks: g.demo.marks,
         draw: g.demo.draw, answers: quizMarks(g) });
     } else {
@@ -1603,18 +1607,34 @@
     return online() && !isTeacher() && !!g.quiz && g.quiz.state === 'open';
   }
 
+  /*
+   * 講解房／擺棋的手數：「顯示手數」打開時，棋譜原有的棋子照棋譜手數，擺上去的變化接著往下數
+   * （例如棋譜停在第 50 手，試下的第一手是 51）；關掉時都不顯示，只標最後一手。
+   */
+  function demoNumbers(g, dv) {
+    if (!prefs.demoNumbers) return null;
+    var rec = G.replay(g.record, dv.base).numbers, baseNo = G.countMoves(g.record, dv.base);
+    var out = new Array(dv.board.length);
+    for (var i = 0; i < out.length; i++) {
+      out[i] = dv.numbers[i] ? baseNo + dv.numbers[i] : (dv.board[i] ? rec[i] : 0);
+    }
+    return out;
+  }
+
   /* 一手答題：學生端在自己選的位置直接顯示一顆棋子（顏色是這題輪到的一方） */
   /* 回傳 { board, numbers, last }：學生的答案當成下一手畫上去，並標上手數（例如白 4） */
-  function answerBoard(g, dv) {
-    var out = { board: dv.board, numbers: dv.numbers, last: dv.last }, q = g.quiz;
+  function answerBoard(g, dv, numbers) {
+    var out = { board: dv.board, numbers: numbers, last: dv.last }, q = g.quiz;
     if (!q || isTeacher() || !online() || q.size !== g.record.size) return out;
     var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
     if (!mine || dv.board[mine.p]) return out;
-    var next = g.demo.moves.filter(function (m) { return !m.s; }).length + 1;
+    var next = G.countMoves(g.record, dv.base) + g.demo.moves.filter(function (m) { return !m.s; }).length + 1;
     out.board = Array.prototype.slice.call(dv.board);
     out.board[mine.p] = q.c;
-    out.numbers = Array.prototype.slice.call(dv.numbers);
-    out.numbers[mine.p] = next;
+    if (numbers) {
+      out.numbers = Array.prototype.slice.call(numbers);
+      out.numbers[mine.p] = next;
+    }
     out.last = mine.p;
     return out;
   }
@@ -2444,7 +2464,9 @@
   $('optConfirm').checked = prefs.confirm;
   $('optSound').checked = prefs.sound;
   $('optNumbers').addEventListener('change', function () {
-    prefs.numbers = this.checked;
+    // 講解房／擺棋時改的是擺棋的手數；其他時候改對局與棋譜的手數
+    if (state.mode === 'play' && state.game && state.game.status === 'demo') prefs.demoNumbers = this.checked;
+    else prefs.numbers = this.checked;
     savePrefs();
     render();
   });
