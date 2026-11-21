@@ -332,35 +332,27 @@
 
   /* 上課／下課動畫：鐘聲＋畫面中間跳出卡片，下課再灑一點彩色紙片 */
   var bannerTimer = 0;
-  function classBanner(on) {
+  function classBanner(on, g) {
     var box = $('classBanner');
     Sound.chime(on);
-    $('classIcon').textContent = on ? '🔔' : '🎉';
-    $('classText').textContent = on ? '上課囉！' : '下課囉！';
-    $('classSub').textContent = on ? '大家坐好，準備開始' : '大家辛苦了，下次見';
-    box.className = 'class-banner ' + (on ? 'start' : 'end');
-    Array.prototype.forEach.call(box.querySelectorAll('.confetti'), function (c) { c.remove(); });
-    if (!on) {
-      var colors = ['#e5322d', '#2f6fd6', '#1f9d55', '#f59e0b', '#8b5cf6', '#ec4899'];
-      for (var i = 0; i < 36; i++) {
-        var c = document.createElement('span');
-        c.className = 'confetti';
-        c.style.left = Math.round(Math.random() * 100) + '%';
-        c.style.background = colors[i % colors.length];
-        c.style.animationDelay = (Math.random() * 0.8).toFixed(2) + 's';
-        c.style.animationDuration = (2 + Math.random() * 1.2).toFixed(2) + 's';
-        c.style.transform = 'rotate(' + Math.round(Math.random() * 360) + 'deg)';
-        box.appendChild(c);
-      }
+    var sub;
+    if (on) {
+      sub = g && g.classStart ? clock(g.classStart) + '　開始' : '開始';
+    } else {
+      var mins = g && g.classStart && g.classEnd ? Math.max(1, Math.round((g.classEnd - g.classStart) / 60000)) : 0;
+      sub = mins ? '本堂課 ' + mins + ' 分鐘　辛苦了' : '辛苦了';
     }
+    $('classText').textContent = on ? '上課' : '下課';
+    $('classSub').textContent = sub;
+    box.className = 'class-banner ' + (on ? 'start' : 'end');
     box.hidden = false;
     // 重新觸發 CSS 動畫
-    var card = box.querySelector('.class-card');
-    card.style.animation = 'none';
-    void card.offsetWidth;
-    card.style.animation = '';
+    var band = box.querySelector('.cb-band');
+    band.style.animation = 'none';
+    void band.offsetWidth;
+    band.style.animation = '';
     clearTimeout(bannerTimer);
-    bannerTimer = setTimeout(function () { box.hidden = true; }, 3200);
+    bannerTimer = setTimeout(function () { box.hidden = true; }, 3600);
   }
 
   /* 學生擺棋權限的說明（toast = true 是權限剛改變時跳出的提示） */
@@ -389,10 +381,6 @@
         Sound.notice();
         toast(prev.status === 'playing' ? '對局暫停，開始擺棋講解' : '開始擺棋講解');
       } else {
-        if (g.lecture && prev.cls !== g.classState && (g.classState === 'on' || g.classState === 'over')) {
-          classBanner(g.classState === 'on');
-          return;
-        }
         if (g.demo.base + g.demo.moves.length > prev.demo) Sound.stone();
         var quizKey = g.quiz ? g.quiz.n + ':' + g.quiz.state : '';
         if (quizKey !== prev.quiz && g.quiz && online()) {
@@ -689,6 +677,8 @@
       else sub = whoText(g, false);
       if (lecture && g.classState === 'ready') {
         setStatus('準備上課', teach ? '準備好了就按「上課」' : '老師馬上就來，請稍等');
+      } else if (lecture && g.classState === 'over') {
+        setStatus('已下課', teach ? '要再開始就按「上課」' : '今天辛苦了');
       } else if (lecture) {
         setStatus(online() && !teach ? '老師講解中' : '講解房', sub);
       } else {
@@ -722,12 +712,16 @@
     $('btnEnd').hidden = online() && !isTeacher();
     // 匯出 SGF 只在對局結束後（覆盤時）出現，下棋中不需要
     $('btnExport').hidden = !(finished || (demo && g.demo.from === 'finished'));
-    state.lastClass = g.classState || '';
-    $('btnEnd').textContent = lecture ? (g.classState === 'on' ? '🔔 下課' : g.classState === 'over' ? '下課中…' : '🔔 上課')
+    // 上課／下課動畫：只要看到講解房的狀態從別的變成「上課」或「下課」就播（老師、學生都一樣）
+    if (lecture && state.lastClass && state.lastClass !== g.classState && (g.classState === 'on' || g.classState === 'over')) {
+      classBanner(g.classState === 'on', g);
+    }
+    state.lastClass = lecture ? g.classState : '';
+    $('btnEnd').textContent = lecture ? (g.classState === 'on' ? '下課' : '上課')
       : state.source || g.startAt > 0 ? '結束對局，回到棋譜' : '結束對局';
-    $('btnEnd').classList.toggle('primary', lecture && g.classState === 'ready');
+    $('btnEnd').classList.toggle('primary', lecture && g.classState !== 'on');
     $('btnEnd').classList.toggle('class-end', lecture && g.classState === 'on');
-    $('btnEnd').disabled = lecture && g.classState === 'over';
+    $('btnEnd').disabled = false;
 
     // 老師擺棋講解
     $('btnTeach').hidden = !(teach && (playing || finished));
@@ -1438,26 +1432,13 @@
     leavePlay(false);
   });
 
-  /* 講解房的「上課／下課」：上課只是開始；下課會播動畫，幾秒後結束講解房（學生回到等待畫面） */
+  /* 講解房的「上課／下課」：兩個都只是播動畫與鐘聲，盤面不動 */
   function classButton() {
     var g = state.game;
     if (!g || !g.lecture || !canTeach()) return;
-    if (g.classState !== 'on') {
-      act(function (x) { return M.setClass(x, 'on'); });
-      return;
-    }
-    ask('下課？', online() ? '大家會看到下課動畫，接著學生回到「等待老師開始上課」。' : '棋盤上擺的變化不會保留。', '下課').then(function (ok) {
-      if (!ok || !state.game || !state.game.lecture) return;
-      act(function (x) { return M.setClass(x, 'over'); }).then(function (done) {
-        if (!done) return;
-        setTimeout(function () {
-          if (!state.game || !state.game.lecture) return;
-          if (online()) net.setGame(null).then(null, function () { toast('連線有問題，無法結束講解房'); });
-          else if (state.source) openReview(state.source, state.returnCursor);
-          else goHome();
-        }, 3300);
-      });
-    });
+    var t = now();
+    // 下課只是播動畫、留在原本的畫面；要關掉講解房用右上角「回首頁」
+    act(function (x) { return M.setClass(x, x.classState === 'on' ? 'over' : 'on', t); });
   }
   $('btnHome').addEventListener('click', function () {
     if (state.mode === 'play') leavePlay(true);

@@ -607,42 +607,64 @@ body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
 .answer-pop-names { margin-top: 2px; word-break: break-all; }
 
 /* ---------- 上課／下課 ---------- */
-.btn.class-end { background: #fff3e0; border-color: #f59e0b; color: #b45309; font-weight: 700; }
-#btnEnd { font-weight: 700; }
+#btnEnd { font-weight: 700; letter-spacing: 0.3em; }
+.btn.class-end { background: #2b2620; border-color: #2b2620; color: #f3e6c8; }
+.btn.class-end:hover { background: #3a332b; }
+
+/* 橫過畫面的一條深色帶：左右展開、文字淡入，再整條淡出 */
 .class-banner {
-  position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center;
-  pointer-events: none; overflow: hidden; background: rgba(30, 24, 14, 0.18);
-  animation: class-bg 3.2s ease forwards;
+  position: fixed; inset: 0; z-index: 70; pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
 }
-.class-card {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 26px 48px 22px; border-radius: 28px; background: #fffdf7;
-  border: 4px solid var(--accent); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  animation: class-card 3.2s cubic-bezier(.2,.9,.3,1.2) forwards;
+.cb-band {
+  width: 100%; padding: 26px 0;
+  background: linear-gradient(90deg, rgba(26, 22, 17, 0) 0%, rgba(26, 22, 17, 0.9) 18%, rgba(26, 22, 17, 0.9) 82%, rgba(26, 22, 17, 0) 100%);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  animation: cb-band 3.6s cubic-bezier(.22, .8, .22, 1) forwards;
 }
-.class-banner.end .class-card { border-color: #f59e0b; }
-.class-icon { font-size: 86px; line-height: 1; transform-origin: 50% 10%; animation: class-bell 0.5s ease-in-out 0.2s 4 alternate; }
-.class-banner.end .class-icon { animation: class-pop 0.6s ease 0.2s 2 alternate; }
-.class-text { font-size: 52px; font-weight: 900; letter-spacing: 0.08em; color: var(--accent-dark); }
-.class-banner.end .class-text { color: #b45309; }
-.class-sub { font-size: 18px; color: var(--muted); }
-.confetti {
-  position: absolute; top: -20px; width: 10px; height: 16px; border-radius: 2px; opacity: 0.9;
-  animation-name: confetti-fall; animation-timing-function: linear; animation-fill-mode: forwards;
+.cb-line {
+  width: min(560px, 70vw); height: 1px;
+  background: linear-gradient(90deg, transparent, #c8a45e 20%, #c8a45e 80%, transparent);
+  transform: scaleX(0); animation: cb-line 3.6s cubic-bezier(.22, .8, .22, 1) forwards;
 }
-@keyframes class-bg { 0% { opacity: 0; } 10% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes class-card {
-  0% { transform: scale(0.3) translateY(40px); opacity: 0; }
-  14% { transform: scale(1.08); opacity: 1; }
-  22% { transform: scale(1); }
-  85% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(0.9) translateY(-20px); opacity: 0; }
+.cb-inner { display: flex; align-items: center; gap: 28px; }
+.cb-words { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.cb-title {
+  font-family: "Noto Serif TC", "Source Han Serif TC", "PMingLiU", "MingLiU", serif;
+  font-size: 64px; font-weight: 600; line-height: 1; color: #f5ecd9;
+  letter-spacing: 0.5em; padding-left: 0.5em;   /* 字距加大後，用左邊補白讓字看起來置中 */
+  animation: cb-title 3.6s cubic-bezier(.22, .8, .22, 1) forwards;
 }
-@keyframes class-bell { from { transform: rotate(-18deg); } to { transform: rotate(18deg); } }
-@keyframes class-pop { from { transform: scale(1); } to { transform: scale(1.25) rotate(-8deg); } }
-@keyframes confetti-fall { to { transform: translateY(110vh) rotate(540deg); } }
+.cb-sub {
+  font-size: 15px; color: #c8a45e; letter-spacing: 0.25em; padding-left: 0.25em;
+  animation: cb-sub 3.6s ease forwards;
+}
+.cb-stone {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  animation: cb-stone-l 3.6s cubic-bezier(.22, .8, .22, 1) forwards;
+}
+.cb-stone.black { background: radial-gradient(circle at 35% 30%, #6a6a6a, #111 60%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
+.cb-stone.white { background: radial-gradient(circle at 35% 30%, #fff, #d6d1c6 90%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); animation-name: cb-stone-r; }
+.class-banner.end .cb-title { color: #efe6d3; }
+
+@keyframes cb-band {
+  0% { opacity: 0; clip-path: inset(0 50% 0 50%); }
+  12% { opacity: 1; clip-path: inset(0 0 0 0); }
+  82% { opacity: 1; clip-path: inset(0 0 0 0); }
+  100% { opacity: 0; clip-path: inset(0 0 0 0); }
+}
+@keyframes cb-line { 0% { transform: scaleX(0); } 22% { transform: scaleX(1); } 100% { transform: scaleX(1); } }
+@keyframes cb-title {
+  0%, 8% { opacity: 0; letter-spacing: 0.9em; padding-left: 0.9em; filter: blur(4px); }
+  28% { opacity: 1; letter-spacing: 0.5em; padding-left: 0.5em; filter: blur(0); }
+  100% { opacity: 1; letter-spacing: 0.5em; padding-left: 0.5em; }
+}
+@keyframes cb-sub { 0%, 22% { opacity: 0; transform: translateY(6px); } 38%, 100% { opacity: 1; transform: none; } }
+@keyframes cb-stone-l { 0%, 10% { opacity: 0; transform: translateX(-40px); } 30%, 100% { opacity: 1; transform: none; } }
+@keyframes cb-stone-r { 0%, 10% { opacity: 0; transform: translateX(40px); } 30%, 100% { opacity: 1; transform: none; } }
 @media (max-width: 600px) {
-  .class-card { padding: 18px 28px; }
-  .class-icon { font-size: 60px; }
-  .class-text { font-size: 36px; }
+  .cb-title { font-size: 44px; }
+  .cb-inner { gap: 16px; }
+  .cb-stone { width: 22px; height: 22px; }
 }

@@ -443,9 +443,11 @@
   var CLASS_STATES = { ready: true, on: true, over: true };
 
   /* 講解房：上課／下課 */
-  function setClass(game, st) {
+  function setClass(game, st, now) {
     if (!game.lecture || !CLASS_STATES[st] || game.classState === st) return false;
     game.classState = st;
+    if (st === 'on') game.classStart = now || 0;      // 上課時間（下課時算上了多久）
+    if (st === 'over') game.classEnd = now || 0;
     return true;
   }
 
@@ -798,7 +800,7 @@
     g.rule = g.rule === 'territory' ? 'territory' : 'area';
     g.lecture = !!g.lecture;
     if (g.lecture) g.classState = CLASS_STATES[g.classState] ? g.classState : 'ready';
-    else delete g.classState;
+    else { delete g.classState; delete g.classStart; delete g.classEnd; }
     if (g.lecture) g.status = 'demo';
     if (g.status === 'demo') {
       var d = g.demo || {};
