@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=20">
+<link rel="stylesheet" href="css/style.css?v=21">
 </head>
 <body>
 
@@ -272,6 +272,58 @@
         <button class="btn primary wide" id="btnTeachEnd">結束擺棋，回到對局</button>
       </div>
 
+      <!-- 講解房的工具：大按鈕，按了才跳出選項，節省版面 -->
+      <div class="lec-tools" id="lecTools" hidden>
+        <div class="pop-wrap" data-need="admin">
+          <button class="lec-btn" data-pop="popSize">棋盤大小</button>
+          <div class="pop" id="popSize" hidden>
+            <button class="btn small" data-lsize="19">19路</button>
+            <button class="btn small" data-lsize="13">13路</button>
+            <button class="btn small" data-lsize="9">9路</button>
+            <button class="btn small" data-act="file">載入棋譜</button>
+          </div>
+        </div>
+        <div class="pop-wrap" data-need="stones">
+          <button class="lec-btn" id="lecStoneBtn" data-pop="popStone">交替落子</button>
+          <div class="pop" id="popStone" hidden>
+            <button class="btn small" data-tool="alt">交替落子</button>
+            <button class="btn small" data-tool="b">只落黑子</button>
+            <button class="btn small" data-tool="w">只落白子</button>
+          </div>
+        </div>
+        <div class="pop-wrap" data-need="marks">
+          <button class="lec-btn" id="lecMarkBtn" data-pop="popMark">標記</button>
+          <div class="pop row-pop" id="popMark" hidden>
+            <button class="btn small" data-tool="tri">△</button>
+            <button class="btn small" data-tool="sq">□</button>
+            <button class="btn small" data-tool="cir">○</button>
+            <button class="btn small" data-tool="x">✕</button>
+            <button class="btn small" data-tool="letter">ABC</button>
+          </div>
+        </div>
+        <div class="pop-wrap" data-need="marks">
+          <button class="lec-btn" id="lecDrawBtn" data-pop="popDraw">畫線</button>
+          <div class="pop" id="popDraw" hidden>
+            <button class="btn small" data-tool="pen">✎ 畫筆</button>
+            <button class="btn small" data-tool="arrow">➜ 箭頭</button>
+            <button class="btn small" data-act="undraw" id="lecUndraw">擦一筆</button>
+            <button class="btn small" data-act="cleardraw" id="lecClearDraw">全擦</button>
+          </div>
+        </div>
+        <div class="pop-wrap" data-need="admin">
+          <button class="lec-btn" id="lecStuBtn" data-pop="popStu">學生</button>
+          <div class="pop" id="popStu" hidden>
+            <div class="stage-list" id="lecStuList"></div>
+          </div>
+        </div>
+        <div class="pop-wrap" data-need="quiz">
+          <button class="lec-btn" id="lecQuizBtn" data-act="quiz">一起答題</button>
+        </div>
+        <div class="pop-wrap" data-need="nav">
+          <button class="lec-btn" id="lecClearBtn" data-act="clear">清除盤面</button>
+        </div>
+      </div>
+
       <!-- 一起答題 -->
       <div class="box teach" id="quizBox" hidden>
         <div class="quiz-title" id="quizTitle"></div>
@@ -448,15 +500,15 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=20"></script>
-<script src="js/engine.js?v=20"></script>
-<script src="js/sgf.js?v=20"></script>
-<script src="js/game.js?v=20"></script>
-<script src="js/match.js?v=20"></script>
-<script src="js/sound.js?v=20"></script>
-<script src="js/net.js?v=20"></script>
-<script src="js/voice.js?v=20"></script>
-<script src="js/board-view.js?v=20"></script>
-<script src="js/app.js?v=20"></script>
+<script src="js/config.js?v=21"></script>
+<script src="js/engine.js?v=21"></script>
+<script src="js/sgf.js?v=21"></script>
+<script src="js/game.js?v=21"></script>
+<script src="js/match.js?v=21"></script>
+<script src="js/sound.js?v=21"></script>
+<script src="js/net.js?v=21"></script>
+<script src="js/voice.js?v=21"></script>
+<script src="js/board-view.js?v=21"></script>
+<script src="js/app.js?v=21"></script>
 </body>
 </html>

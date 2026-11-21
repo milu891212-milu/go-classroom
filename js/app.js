@@ -504,7 +504,7 @@
     renderChat();
     if (!table) { $('modeTag').textContent = ''; return; }
     if (m === 'play') renderPlay(); else renderReview();
-    $('boardBar').hidden = !inLectureView() || $('teachBox').hidden || $('teachNav').hidden;
+    if (m !== 'play') $('boardBar').hidden = true;
     updateClocks();
   }
 
@@ -733,6 +733,10 @@
       }
       $('btnTeachEnd').textContent = g.demo.from === 'playing' ? '結束擺棋，回到對局' : '結束擺棋';
     }
+    // 講解房：工具改成左側的大按鈕（lecTools），原本的工具框只在「輪流擺」時顯示輪到誰
+    $('boardBar').hidden = !(lecture && teachUi && rights.nav);
+    renderLecTools(g, rights, lecture && teachUi);
+    if (lecture) $('teachBox').hidden = !(teachUi && rights.turns);
 
     if (sc) {
       var diff = Math.abs(sc.margin);
@@ -1516,7 +1520,11 @@
 
   /* 老師的在線學生列表：舉手的排前面；第一個是「全部學生」 */
   function renderStage(g) {
-    var box = $('stageList'), list = onlineStudents(), pick = currentPick(g);
+    renderStageInto($('stageList'), g);
+    renderStageInto($('lecStuList'), g);
+  }
+  function renderStageInto(box, g) {
+    var list = onlineStudents(), pick = currentPick(g);
     if (pick.who && pick.who !== '*' && list.indexOf(pick.who) < 0) list.push(pick.who);
     list.sort(function (a, b) {
       var ha = handUp(a), hb = handUp(b);
@@ -1577,7 +1585,7 @@
 
   function renderQuiz(g, demo) {
     var show = demo && online() && g.status === 'demo';
-    $('quizBox').hidden = !show || (!g.quiz && !isTeacher());
+    $('quizBox').hidden = !show || (!g.quiz && (!isTeacher() || !!g.lecture));
     if ($('quizBox').hidden) return;
     var q = g.quiz, teacher = isTeacher();
     var size = g.record.size, groups = q ? M.quizGroups(g) : [];
@@ -1615,6 +1623,91 @@
     net.setHand(up).then(function () { if (up) toast('已舉手，等老師點你'); },
       function () { toast('連線有問題，沒有送出'); });
   });
+  /* ---------- 講解房的大按鈕與跳出選單 ---------- */
+  var openPop = '';   // 目前打開的選單 id
+  var TOOL_LABEL = { alt: '交替落子', b: '只落黑子', w: '只落白子', tri: '標記 △', sq: '標記 □', cir: '標記 ○',
+    x: '標記 ✕', letter: '標記 ABC', pen: '✎ 畫筆', arrow: '➜ 箭頭' };
+  function closePops() {
+    if (!openPop) return;
+    openPop = '';
+    Array.prototype.forEach.call($('lecTools').querySelectorAll('.pop'), function (p) { p.hidden = true; });
+    Array.prototype.forEach.call($('lecTools').querySelectorAll('[data-pop]'), function (b) { b.classList.remove('open'); });
+  }
+  function renderLecTools(g, rights, show) {
+    var box = $('lecTools');
+    box.hidden = !show;
+    if (!show) { closePops(); return; }
+    var tool = demoTool(g), d = g.demo, pick = currentPick(g);
+    var need = {
+      admin: rights.admin, stones: rights.stones && !rights.turns, marks: rights.marks, nav: rights.nav,
+      quiz: rights.admin && online()
+    };
+    Array.prototype.forEach.call(box.querySelectorAll('[data-need]'), function (w) {
+      w.hidden = !need[w.getAttribute('data-need')];
+    });
+    var isStone = STONE_TOOL[tool] !== undefined, isDraw = !!DRAW_TOOL[tool], isMark = !isStone && !isDraw;
+    $('lecStoneBtn').textContent = isStone ? TOOL_LABEL[tool] : '交替落子';
+    $('lecStoneBtn').classList.toggle('on', isStone);
+    $('lecMarkBtn').textContent = isMark ? TOOL_LABEL[tool] : '標記';
+    $('lecMarkBtn').classList.toggle('on', isMark);
+    $('lecDrawBtn').textContent = isDraw ? TOOL_LABEL[tool] : '畫線';
+    $('lecDrawBtn').classList.toggle('on', isDraw);
+    Array.prototype.forEach.call(box.querySelectorAll('.pop [data-tool]'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tool') === tool);
+    });
+    $('lecUndraw').disabled = !d.draw.length;
+    $('lecClearDraw').disabled = !d.draw.length;
+    $('lecClearBtn').disabled = !d.moves.length && !d.marks.length && !d.undone.length && !d.draw.length;
+    $('lecStuBtn').textContent = pick.who ? (pick.who === '*' ? '全部學生' : nick(pick.who)) + '・' + MODE_NAME[pick.mode] : '學生';
+    $('lecStuBtn').classList.toggle('on', !!pick.who);
+    $('lecQuizBtn').textContent = g.quiz ? '結束答題' : '一起答題';
+    $('lecQuizBtn').classList.toggle('on', !!g.quiz);
+    if (rights.admin && online()) renderStageInto($('lecStuList'), g);
+    Array.prototype.forEach.call(box.querySelectorAll('.pop'), function (p) { p.hidden = p.id !== openPop; });
+    Array.prototype.forEach.call(box.querySelectorAll('[data-pop]'), function (b) {
+      b.classList.toggle('open', b.getAttribute('data-pop') === openPop);
+    });
+  }
+  $('lecTools').addEventListener('click', function (ev) {
+    var t = ev.target, el;
+    if ((el = t.closest('[data-pop]'))) {
+      var id = el.getAttribute('data-pop');
+      var was = openPop === id;
+      closePops();
+      if (!was) { openPop = id; render(); }
+      return;
+    }
+    if ((el = t.closest('[data-tool]'))) {
+      state.tool = el.getAttribute('data-tool');
+      closePops();
+      render();
+      return;
+    }
+    if ((el = t.closest('[data-lsize]'))) {
+      closePops();
+      $('lectureSizes').querySelector('[data-lsize="' + el.getAttribute('data-lsize') + '"]').click();
+      return;
+    }
+    if ((el = t.closest('[data-stage]'))) {
+      closePops();
+      if (isTeacher()) openStudentDialog(el.getAttribute('data-stage'));
+      return;
+    }
+    if ((el = t.closest('[data-act]'))) {
+      var a = el.getAttribute('data-act');
+      if (a !== 'undraw') closePops();   // 擦一筆可以連續按
+      if (a === 'file') $('fileInput').click();
+      else if (a === 'undraw') $('btnUndraw').click();
+      else if (a === 'cleardraw') $('btnClearDraw').click();
+      else if (a === 'clear') $('btnTeachClear').click();
+      else if (a === 'quiz') (state.game && state.game.quiz ? $('btnQuizClose') : $('btnQuizOpen')).click();
+    }
+  });
+  // 點選單以外的地方就收起選單
+  document.addEventListener('click', function (ev) {
+    if (openPop && !ev.target.closest('#lecTools')) closePops();
+  });
+
   $('stageList').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-stage]');
     if (b && isTeacher()) openStudentDialog(b.getAttribute('data-stage'));

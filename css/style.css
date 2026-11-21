@@ -402,7 +402,7 @@ body.lecture-layout #playBox #teachBox { order: -1; }
     position: sticky; top: 12px;
     max-height: calc(100dvh - var(--topbar) - 24px);
   }
-  body.dock .table > .panel { overflow-y: auto; padding-right: 2px; }
+  body.dock .table > .panel { overflow: visible; }
   body.dock .side-right { display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - var(--topbar) - 24px); }
   body.dock .side-right .chat, body.dock .side-right .voice {
     position: static; width: auto; box-shadow: none; inset: auto;
@@ -411,6 +411,35 @@ body.lecture-layout #playBox #teachBox { order: -1; }
   body.dock .side-right .chat { flex: 1; min-height: 0; height: auto; }
   body.dock .hand-fab { right: auto; left: 16px; bottom: 16px; }
 }
+
+/* ---------- 講解房的大按鈕 ---------- */
+body.lecture-layout #teachStoneBox, body.lecture-layout #teachMarkBox, body.lecture-layout #teachDrawBox,
+body.lecture-layout #teachWhoBox, body.lecture-layout #btnTeachClear, body.lecture-layout #lectureBox,
+body.lecture-layout #btnQuizOpen, body.lecture-layout #btnQuizClose { display: none !important; }
+.lec-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pop-wrap { position: relative; min-width: 0; }
+.lec-btn {
+  width: 100%; min-height: 48px; padding: 6px 4px;
+  font: inherit; font-size: 15px; font-weight: 700; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 2px 0 rgba(60, 40, 10, 0.08);
+}
+.lec-btn:hover { background: #faf6ee; border-color: #cbbfa8; }
+.lec-btn:disabled { opacity: 0.45; cursor: default; }
+.lec-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-dark); }
+.lec-btn.open { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 30;
+  min-width: 100%; padding: 8px; display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(60, 40, 10, 0.2);
+}
+.pop .btn { white-space: nowrap; }
+.pop.row-pop { flex-direction: row; flex-wrap: wrap; width: 220px; }
+.pop.row-pop .btn { flex: 1 0 56px; }
+.pop-wrap:nth-child(3n) .pop { left: auto; right: 0; }
+#popStu { width: 240px; }
 
 /* 寬螢幕打開聊天室時，主畫面往左讓出位置 */
 @media (min-width: 1101px) {
