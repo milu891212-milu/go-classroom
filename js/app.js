@@ -1201,8 +1201,13 @@
       return;
     }
     if (g.status === 'demo' && g.quiz && online() && isTeacher()) {
-      // 答題中：老師點棋盤不落子；點藍點顯示選這裡的學生
-      showAnswerPop(g, idx);
+      // 答題中：老師點棋盤不落子；一手答題時點藍點顯示選這裡的學生
+      if (g.quiz.multi) toast('答題中，點棋盤不會落子；在左邊點學生的名字看他擺的變化');
+      else showAnswerPop(g, idx);
+      return;
+    }
+    if (g.status === 'demo' && studentAnswering(g) && g.quiz.multi) {
+      draftPlay(g, idx);
       return;
     }
     if (g.status === 'demo' && studentAnswering(g)) {
@@ -1706,6 +1711,15 @@
   /* 回傳 { board, numbers, last }：學生的答案當成下一手畫上去，並標上手數（例如白 4） */
   function answerBoard(g, dv, numbers) {
     var out = { board: dv.board, numbers: numbers, last: dv.last }, q = g.quiz;
+    if (q && q.multi && online() && q.size === g.record.size) {
+      // 多手答題：學生看自己正在擺的變化；老師看正在檢視的那位學生交的變化
+      if (isTeacher()) {
+        var sub = q.answers.filter(function (x) { return x.a === viewAnswer; })[0];
+        return sub ? overlayMoves(g, dv, sub.m) : out;
+      }
+      syncDraft(q);
+      return draft.moves.length ? overlayMoves(g, dv, draft.moves) : out;
+    }
     if (!q || isTeacher() || !online() || q.size !== g.record.size) return out;
     var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
     if (!mine || dv.board[mine.p]) return out;
@@ -1721,6 +1735,74 @@
     out.last = mine.p;
     return out;
   }
+
+  /* ---------- 多手答題 ---------- */
+  var draft = { n: 0, moves: [] };   // 學生自己正在擺的變化（只在這台裝置，按提交才送出）
+  var viewAnswer = '';               // 老師正在棋盤上看哪位學生的變化
+
+  /* 換了一題就清掉草稿 */
+  function syncDraft(q) {
+    if (draft.n !== q.n) { draft = { n: q.n, moves: [] }; }
+  }
+
+  /* 在目前盤面上擺一串變化（第一手是題目輪到的顏色，之後黑白輪流），手數從 1 開始 */
+  function overlayMoves(g, dv, moves) {
+    var pos = E.clonePosition(dv.pos), c = g.quiz.c, nums = new Array(pos.board.length), last = dv.last, k = 0;
+    for (var i = 0; i < nums.length; i++) nums[i] = 0;
+    pos.ko = -1;
+    moves.forEach(function (p) {
+      var r = E.place(pos, c, p, false);
+      if (r.ok) {
+        for (var j = 0; j < r.captured.length; j++) nums[r.captured[j]] = 0;
+        nums[p] = ++k;
+        last = p;
+      }
+      c = E.other(c);
+    });
+    return { board: pos.board, numbers: nums, last: last };
+  }
+
+  /* 學生在自己的棋盤上擺下一手 */
+  function draftPlay(g, idx) {
+    var q = g.quiz;
+    syncDraft(q);
+    var dv = M.demoView(g), shown = overlayMoves(g, dv, draft.moves);
+    var pos = E.clonePosition(dv.pos);
+    pos.ko = -1;
+    var c = q.c;
+    draft.moves.forEach(function (p) { E.place(pos, c, p, false); c = E.other(c); });
+    pos.ko = -1;
+    var why = E.check(pos, c, idx);
+    if (why) { toast(shown.board[idx] ? '這裡已經有棋子了' : '這裡不能下'); return; }
+    draft.moves.push(idx);
+    Sound.stone();
+    render();
+  }
+
+  $('btnDraftBack').addEventListener('click', function () {
+    if (draft.moves.length) { draft.moves.pop(); render(); }
+  });
+  $('btnDraftClear').addEventListener('click', function () {
+    if (draft.moves.length) { draft.moves = []; render(); }
+  });
+  $('btnDraftSubmit').addEventListener('click', function () {
+    var g = state.game;
+    if (!g || !g.quiz || !g.quiz.multi) return;
+    if (!draft.moves.length) { toast('先在棋盤上擺出你的變化'); return; }
+    var me = session.account, moves = draft.moves.slice();
+    act(function (x) { return M.quizSubmit(x, me, moves); }).then(function (ok) {
+      if (ok) toast('已提交 ' + moves.length + ' 手，可以修改後再提交');
+    });
+  });
+
+  /* 老師點學生名字：在棋盤上看他的變化，再點一次收起 */
+  $('quizResults').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-view]');
+    if (!b) return;
+    var a = b.getAttribute('data-view');
+    viewAnswer = viewAnswer === a ? '' : a;
+    render();
+  });
 
   /* 老師點答題的藍點：在那一點旁邊跳出選這裡的學生 */
   function showAnswerPop(g, idx) {
@@ -1770,6 +1852,9 @@
     var q = g.quiz, teacher = isTeacher();
     var size = g.record.size, groups = q ? M.quizGroups(g) : [];
     var students = onlineStudents(), answered = q ? q.answers.map(function (x) { return x.a; }) : [];
+    $('quizActions').hidden = true;
+    if (!q || !q.multi) viewAnswer = '';
+    if (q && q.multi) { renderMulti(g, q, teacher, students); return; }
     var title = '', text = '';
     if (q && teacher) {
       title = '答題中';
@@ -1795,6 +1880,51 @@
     }
     $('btnQuizOpen').hidden = !teacher || !!q;
     $('btnQuizClose').hidden = !teacher || !q;
+  }
+
+  /* 多手答題的左側面板：老師看誰交了（點名字看變化），學生擺好按提交 */
+  function renderMulti(g, q, teacher, students) {
+    var res = $('quizResults');
+    res.textContent = '';
+    $('btnQuizOpen').hidden = true;
+    $('btnQuizClose').hidden = true;
+    if (teacher) {
+      var done = q.answers.map(function (x) { return x.a; });
+      var missing = students.filter(function (a) { return done.indexOf(a) < 0; });
+      $('quizTitle').textContent = '多手答題';
+      $('quizText').textContent = '已提交 ' + done.length + (students.length ? ' / ' + students.length : '') + ' 人' +
+        (missing.length ? '　還沒交：' + missing.map(nick).join('、') : '');
+      if (viewAnswer && done.indexOf(viewAnswer) < 0) viewAnswer = '';
+      q.answers.forEach(function (x) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'quiz-sub' + (viewAnswer === x.a ? ' on' : '');
+        b.setAttribute('data-view', x.a);
+        var n = document.createElement('span'), k = document.createElement('span');
+        n.textContent = nick(x.a);
+        k.textContent = x.m.length + ' 手' + (viewAnswer === x.a ? '　看棋盤中' : '');
+        b.appendChild(n);
+        b.appendChild(k);
+        res.appendChild(b);
+      });
+      if (q.answers.length) {
+        var hint = document.createElement('div');
+        hint.className = 'quiz-hint';
+        hint.textContent = '點名字在棋盤上看他擺的變化，再點一次收起';
+        res.appendChild(hint);
+      }
+      return;
+    }
+    syncDraft(q);
+    var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
+    $('quizTitle').textContent = '老師出題：多手答題';
+    $('quizText').textContent = (draft.moves.length ? '已擺 ' + draft.moves.length + ' 手' : G.colorName(q.c) + '先，在棋盤上擺出你的變化') +
+      (mine ? '　已提交 ' + mine.m.length + ' 手' : '');
+    $('quizActions').hidden = false;
+    $('btnDraftBack').disabled = !draft.moves.length;
+    $('btnDraftClear').disabled = !draft.moves.length;
+    $('btnDraftSubmit').disabled = !draft.moves.length;
+    $('btnDraftSubmit').textContent = mine ? '重新提交' : '提交';
   }
 
   $('handFab').addEventListener('click', function () {
@@ -1931,8 +2061,13 @@
       b.classList.toggle('on', b.getAttribute('data-tool') === tool);
     });
     $('lecClearBtn').disabled = !d.moves.length && !d.marks.length && !d.undone.length && !d.draw.length;
-    $('lecQuizBtn').textContent = g.quiz ? '結束答題' : '一手答題';
-    $('lecQuizBtn').classList.toggle('on', !!g.quiz);
+    var single = g.quiz && !g.quiz.multi, multi = g.quiz && g.quiz.multi;
+    $('lecQuizBtn').textContent = single ? '結束答題' : '一手答題';
+    $('lecQuizBtn').classList.toggle('on', !!single);
+    $('lecQuizBtn').disabled = !!multi;
+    $('lecMultiBtn').textContent = multi ? '結束答題' : '多手答題';
+    $('lecMultiBtn').classList.toggle('on', !!multi);
+    $('lecMultiBtn').disabled = !!single;
     Array.prototype.forEach.call(box.querySelectorAll('.pop'), function (p) { p.hidden = p.id !== openPop; });
     Array.prototype.forEach.call(box.querySelectorAll('[data-pop]'), function (b) {
       b.classList.toggle('open', b.getAttribute('data-pop') === openPop);
@@ -1969,6 +2104,7 @@
       if (a === 'file') $('fileInput').click();
       else if (a === 'clear') $('btnTeachClear').click();
       else if (a === 'quiz') (state.game && state.game.quiz ? $('btnQuizClose') : $('btnQuizOpen')).click();
+      else if (a === 'multi') act(function (x) { return x.quiz ? M.quizClose(x) : M.quizOpen(x, true); });
     }
   }
   $('lecTools').addEventListener('click', onLecClick);

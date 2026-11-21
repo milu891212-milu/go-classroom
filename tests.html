@@ -827,6 +827,23 @@
     eq(M0.normalize(throughDatabase(n)).classState, undefined);
   });
 
+  test('多手答題：學生提交變化、重新提交會覆蓋；經過資料庫一致；一手答題的作答不能用', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(M0.quizOpen(g, true), true); eq(g.quiz.multi, true);
+    eq(M0.quizAnswer(g, 'a', 10), false, '多手答題不能用一手答題的方式作答');
+    eq(M0.quizSubmit(g, 'a', []), false, '沒有擺棋不能提交');
+    eq(M0.quizSubmit(g, 'a', [10, 11, 12]), true);
+    eq(M0.quizSubmit(g, 'b', [20, 99, 21]), true);
+    eq(g.quiz.answers[1].m, [20, 21], '超出棋盤的位置去掉');
+    eq(M0.quizSubmit(g, 'a', [30]), true);
+    eq(g.quiz.answers[0], { a: 'a', m: [30] }, '重新提交會覆蓋');
+    eq(M0.normalize(throughDatabase(g)).quiz, g.quiz, '經過資料庫一致');
+    eq(M0.quizGroups(g), [], '多手答題沒有一手答題的統計');
+    var s1 = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    M0.quizOpen(s1);
+    eq(M0.quizSubmit(s1, 'a', [1]), false, '一手答題不能提交變化');
+  });
+
   var pass = results.filter(function (r) { return r.ok; }).length;
   document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
   document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';

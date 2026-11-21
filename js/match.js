@@ -510,10 +510,28 @@
   /* ---------- 一起答題 ---------- */
 
   /* 老師出題：學生各自點一個位置 */
-  function quizOpen(game) {
+  /* multi = true 是「多手答題」：學生在自己的棋盤上擺一串變化，按提交後老師看得到 */
+  function quizOpen(game, multi) {
     if (game.status !== 'demo' || (game.quiz && game.quiz.state === 'open')) return false;
     // c：這題是輪到哪一色下（學生端用這個顏色顯示自己的答案）
     game.quiz = { n: ((game.quiz && game.quiz.n) || 0) + 1, state: 'open', size: game.record.size, c: demoNextColor(game), answers: [] };
+    if (multi) game.quiz.multi = true;
+    return true;
+  }
+
+  var MAX_MULTI = 60;   // 多手答題一次最多交幾手
+
+  /* 多手答題：學生提交（或重新提交）自己擺的變化 moves = [位置, …]，第一手是 quiz.c，之後黑白輪流 */
+  function quizSubmit(game, account, moves) {
+    var q = game.quiz, size = game.record.size;
+    if (game.status !== 'demo' || !q || !q.multi || q.state !== 'open' || !account || q.size !== size) return false;
+    var m = (moves || []).slice(0, MAX_MULTI).filter(function (p) { return p >= 0 && p < size * size; });
+    if (!m.length) return false;
+    var list = q.answers, i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].a === account) { list[i].m = m; return true; }
+    }
+    list.push({ a: account, m: m });
     return true;
   }
 
@@ -522,6 +540,7 @@
     var q = game.quiz, size = game.record.size;
     if (game.status !== 'demo' || !q || q.state !== 'open' || !account) return false;
     if (q.size !== size || !(idx >= 0 && idx < size * size)) return false;
+    if (q.multi) return false;   // 多手答題用 quizSubmit
     var list = q.answers, i;
     for (i = 0; i < list.length; i++) {
       if (list[i].a !== account) continue;
@@ -549,7 +568,7 @@
   /* 答案依位置分組：[{ p, names: [...] }]，人多的排前面 */
   function quizGroups(game) {
     var q = game.quiz, by = {}, out = [];
-    if (!q) return out;
+    if (!q || q.multi) return out;
     q.answers.forEach(function (x) {
       if (!by[x.p]) { by[x.p] = { p: x.p, names: [] }; out.push(by[x.p]); }
       by[x.p].names.push(x.a);
@@ -832,8 +851,11 @@
         state: q.state,
         size: q.size || r.size,
         c: q.c === WHITE ? WHITE : BLACK,
-        answers: toArray(q.answers).filter(function (x) { return x && x.a; }).map(function (x) { return { a: x.a, p: x.p }; })
+        answers: toArray(q.answers).filter(function (x) { return x && x.a; }).map(function (x) {
+          return q.multi ? { a: x.a, m: toArray(x.m) } : { a: x.a, p: x.p };
+        })
       } : null;
+      if (g.quiz && q.multi) g.quiz.multi = true;
     } else {
       g.demo = null;
       g.quiz = null;
@@ -880,6 +902,7 @@
     demoSetWho: demoSetWho,
     quizOpen: quizOpen,
     quizAnswer: quizAnswer,
+    quizSubmit: quizSubmit,
     quizShow: quizShow,
     quizClose: quizClose,
     quizGroups: quizGroups,

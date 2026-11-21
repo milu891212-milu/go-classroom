@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=37">
+<link rel="stylesheet" href="css/style.css?v=38">
 </head>
 <body>
 
@@ -336,6 +336,11 @@
         <div class="quiz-title" id="quizTitle"></div>
         <div class="quiz-text" id="quizText"></div>
         <div class="quiz-results" id="quizResults"></div>
+        <div class="quiz-actions" id="quizActions" hidden>
+          <button class="btn" id="btnDraftBack">上一手</button>
+          <button class="btn" id="btnDraftClear">清除</button>
+          <button class="btn primary" id="btnDraftSubmit">提交</button>
+        </div>
         <button class="btn wide" id="btnQuizOpen">一起答題</button>
         <button class="btn wide" id="btnQuizClose">結束答題</button>
       </div>
@@ -377,6 +382,9 @@
       </div>
       <div class="pop-wrap" data-need="quiz">
         <button class="lec-btn" id="lecQuizBtn" data-act="quiz">一手答題</button>
+      </div>
+      <div class="pop-wrap" data-need="quiz">
+        <button class="lec-btn" id="lecMultiBtn" data-act="multi">多手答題</button>
       </div>
     </div>
   </aside>
@@ -554,15 +562,15 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=37"></script>
-<script src="js/engine.js?v=37"></script>
-<script src="js/sgf.js?v=37"></script>
-<script src="js/game.js?v=37"></script>
-<script src="js/match.js?v=37"></script>
-<script src="js/sound.js?v=37"></script>
-<script src="js/net.js?v=37"></script>
-<script src="js/voice.js?v=37"></script>
-<script src="js/board-view.js?v=37"></script>
-<script src="js/app.js?v=37"></script>
+<script src="js/config.js?v=38"></script>
+<script src="js/engine.js?v=38"></script>
+<script src="js/sgf.js?v=38"></script>
+<script src="js/game.js?v=38"></script>
+<script src="js/match.js?v=38"></script>
+<script src="js/sound.js?v=38"></script>
+<script src="js/net.js?v=38"></script>
+<script src="js/voice.js?v=38"></script>
+<script src="js/board-view.js?v=38"></script>
+<script src="js/app.js?v=38"></script>
 </body>
 </html>
