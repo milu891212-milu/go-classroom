@@ -668,3 +668,9 @@ body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
   .cb-inner { gap: 16px; }
   .cb-stone { width: 22px; height: 22px; }
 }
+
+/* 棋盤下方的線條圖示 */
+.bar-icon .ico { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.bar-icon .ico .fill { fill: currentColor; }
+.bar-icon { gap: 6px; color: #4a3f33; }
+.bar-icon small { font-size: 13px; }
