@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=21">
+<link rel="stylesheet" href="css/style.css?v=22">
 </head>
 <body>
 
@@ -151,7 +151,37 @@
   <section class="board-wrap">
     <svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="棋盤"></svg>
     <!-- 講解房：上一手／下一手放在棋盤下方 -->
-    <div class="board-bar" id="boardBar" hidden></div>
+    <div class="board-bar" id="boardBar" hidden>
+      <div class="bar-nav" id="barNav">
+        <button class="btn" data-step="first" title="回到開頭">|◀</button>
+        <button class="btn fast" data-step="-10" title="退 10 手">◀◀</button>
+        <button class="btn" data-step="-1" title="上一手（鍵盤 ←）">◀</button>
+        <span class="bar-count" id="barCount"></span>
+        <button class="btn" data-step="1" title="下一手（鍵盤 →）">▶</button>
+        <button class="btn fast" data-step="10" title="進 10 手">▶▶</button>
+        <button class="btn" data-step="last" title="到最後">▶|</button>
+      </div>
+      <div class="bar-tools" id="barTools">
+        <button class="bar-icon" id="barTrial" title="試下：擺完按這裡結束，就回到原來的盤面">✋<small>試下</small></button>
+        <div class="pop-wrap">
+          <button class="bar-icon" id="barPen" title="畫筆">🖌️<small>畫筆</small></button>
+          <div class="pop up" id="popPen" hidden>
+            <div class="swatches" id="penColors"></div>
+            <button class="btn small" id="barClearDraw">清除全部</button>
+          </div>
+        </div>
+        <div class="pop-wrap">
+          <button class="bar-icon" id="barMark" title="標記">⑧<small>標記</small></button>
+          <div class="pop up row-pop" id="popMark" hidden>
+            <button class="btn small" data-tool="tri">△</button>
+            <button class="btn small" data-tool="sq">□</button>
+            <button class="btn small" data-tool="cir">○</button>
+            <button class="btn small" data-tool="x">✕</button>
+            <button class="btn small" data-tool="letter">ABC</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- 講解房（寬螢幕）：右側固定放語音與聊天室 -->
@@ -258,10 +288,9 @@
         <div id="teachDrawBox">
           <div class="teach-title">畫線</div>
           <div class="tools" id="teachDraw">
-            <button class="btn small" data-tool="pen" title="在棋盤上自由畫線">✎ 畫筆</button>
-            <button class="btn small" data-tool="arrow" title="按住拖曳畫出箭頭">➜ 箭頭</button>
-            <button class="btn small" id="btnUndraw" title="擦掉最後畫的一筆">擦一筆</button>
-            <button class="btn small" id="btnClearDraw" title="擦掉所有畫線">全擦</button>
+            <button class="btn small" data-tool="pen" title="在棋盤上自由畫線">🖌️ 畫筆</button>
+            <button class="btn small" id="btnUndraw" hidden>擦一筆</button>
+            <button class="btn small" id="btnClearDraw" title="擦掉所有畫線">清除全部</button>
           </div>
         </div>
         <div id="teachWhoBox">
@@ -289,25 +318,6 @@
             <button class="btn small" data-tool="alt">交替落子</button>
             <button class="btn small" data-tool="b">只落黑子</button>
             <button class="btn small" data-tool="w">只落白子</button>
-          </div>
-        </div>
-        <div class="pop-wrap" data-need="marks">
-          <button class="lec-btn" id="lecMarkBtn" data-pop="popMark">標記</button>
-          <div class="pop row-pop" id="popMark" hidden>
-            <button class="btn small" data-tool="tri">△</button>
-            <button class="btn small" data-tool="sq">□</button>
-            <button class="btn small" data-tool="cir">○</button>
-            <button class="btn small" data-tool="x">✕</button>
-            <button class="btn small" data-tool="letter">ABC</button>
-          </div>
-        </div>
-        <div class="pop-wrap" data-need="marks">
-          <button class="lec-btn" id="lecDrawBtn" data-pop="popDraw">畫線</button>
-          <div class="pop" id="popDraw" hidden>
-            <button class="btn small" data-tool="pen">✎ 畫筆</button>
-            <button class="btn small" data-tool="arrow">➜ 箭頭</button>
-            <button class="btn small" data-act="undraw" id="lecUndraw">擦一筆</button>
-            <button class="btn small" data-act="cleardraw" id="lecClearDraw">全擦</button>
           </div>
         </div>
         <div class="pop-wrap" data-need="admin">
@@ -500,15 +510,15 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=21"></script>
-<script src="js/engine.js?v=21"></script>
-<script src="js/sgf.js?v=21"></script>
-<script src="js/game.js?v=21"></script>
-<script src="js/match.js?v=21"></script>
-<script src="js/sound.js?v=21"></script>
-<script src="js/net.js?v=21"></script>
-<script src="js/voice.js?v=21"></script>
-<script src="js/board-view.js?v=21"></script>
-<script src="js/app.js?v=21"></script>
+<script src="js/config.js?v=22"></script>
+<script src="js/engine.js?v=22"></script>
+<script src="js/sgf.js?v=22"></script>
+<script src="js/game.js?v=22"></script>
+<script src="js/match.js?v=22"></script>
+<script src="js/sound.js?v=22"></script>
+<script src="js/net.js?v=22"></script>
+<script src="js/voice.js?v=22"></script>
+<script src="js/board-view.js?v=22"></script>
+<script src="js/app.js?v=22"></script>
 </body>
 </html>

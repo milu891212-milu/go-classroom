@@ -770,6 +770,38 @@
     eq(M0.normalize(throughDatabase(g)).student, '');
   });
 
+  /* ---------- 試下與畫筆顏色 ---------- */
+  test('試下：從棋譜中間開始擺，結束後回到原來的局面；試下中不能退到試下之前', function () {
+    var rec = S.load('(;GM[1]SZ[9];B[cc];W[gg];B[cg];W[gc])');
+    var g = M0.createLecture(rec, 2);
+    eq(M0.demoTrial(g, false), false, '沒有試下不能結束');
+    eq(M0.demoTrial(g, true), true); eq(M0.demoTrial(g, true), false, '不能重複開始');
+    eq(M0.demoPlay(g, 0, 40), true); eq(M0.demoPlay(g, 0, 41), true);
+    eq(M0.normalize(throughDatabase(g)).demo.trial, { at: 0, base: 2 }, '經過資料庫內容一致');
+    eq(M0.demoBack(g), true); eq(M0.demoBack(g), true);
+    eq(g.demo.moves.length, 0);
+    eq(M0.demoTrial(g, false), true);
+    eq(g.demo.moves, []); eq(g.demo.base, 2, '回到第 2 手'); eq(g.demo.trial, undefined);
+    // 空白棋盤：已經擺好的棋不會被試下拿掉
+    var b = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    M0.demoPlay(b, 0, 10); M0.demoPlay(b, 0, 11);
+    M0.demoTrial(b, true);
+    M0.demoPlay(b, 0, 12);
+    eq(M0.demoBack(b), true); eq(M0.demoBack(b), false, '不能退到試下之前');
+    M0.demoForward(b);
+    eq(M0.demoToStart(b), true); eq(b.demo.moves.length, 2, '|◀ 回到試下開始的地方');
+    M0.demoPlay(b, 0, 12);
+    eq(M0.demoTrial(b, false), true); eq(b.demo.moves.length, 2, '試下的棋拿掉，原本的保留');
+  });
+
+  test('畫筆顏色：存得進去、經過資料庫一致，不合法的顏色不存', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    M0.demoDraw(g, { t: 'pen', pts: [1, 1, 5, 5], c: '#2f6fd6' });
+    M0.demoDraw(g, { t: 'pen', pts: [1, 1, 5, 5], c: 'red;x' });
+    eq(g.demo.draw[0].c, '#2f6fd6'); eq(g.demo.draw[1].c, undefined);
+    eq(M0.normalize(throughDatabase(g)).demo.draw, g.demo.draw);
+  });
+
   var pass = results.filter(function (r) { return r.ok; }).length;
   document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
   document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';

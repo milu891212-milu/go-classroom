@@ -91,6 +91,7 @@
     pending: -1,       // 「落子前先確認」時暫定的落點
     hover: -1,
     pos: null,         // 目前畫面上的局面
+    penColor: '#e5322d',   // 畫筆顏色（每台裝置自己選）
     tool: 'alt'        // 老師擺棋時選的工具：alt / b / w（擺子）、tri / sq / cir / x / letter（標記）、pen / arrow（畫線）
   };
   var RULE_NAME = { territory: '比目法', area: '數子法' };
@@ -455,13 +456,6 @@
     var lec = inLectureView(), dock = lec && online() && wideScreen.matches;
     document.body.classList.toggle('lecture-layout', lec);
     document.body.classList.toggle('dock', dock);
-    if (lec) {
-      moveTo($('teachNav'), $('boardBar'));
-      moveTo($('teachWhere'), $('boardBar'));
-    } else {
-      moveBack($('teachNav'), navSlot);
-      moveBack($('teachWhere'), $('teachNav'));
-    }
     $('sideRight').hidden = !dock;
     if (dock) {
       moveTo($('voicePanel'), $('sideRight'));
@@ -700,13 +694,18 @@
       });
       if (rights.admin && online()) renderStage(g);
       var dm = g.demo, atEnd = dv.base >= dv.total, start = M.demoFloor(g);
-      var noBack = !dm.moves.length && dv.base <= start;   // 最多退到開始下的那一手
+      var keep = dm.trial ? dm.trial.at : 0;   // 試下中不能退到試下之前
+      var noBack = dm.moves.length <= keep && (keep > 0 || dv.base <= start);   // 最多退到開始下的那一手
       var noFwd = !dm.undone.length && (dm.moves.length > 0 || atEnd);
       Array.prototype.forEach.call($('teachNav').querySelectorAll('[data-step]'), function (b) {
         var s = b.getAttribute('data-step');
         b.disabled = (s === 'first' || parseInt(s, 10) < 0) ? noBack : noFwd;
       });
-      $('teachNav').hidden = !rights.nav;   // 空白棋盤也要有：一手一手退回／重擺擺過的變化
+      $('teachNav').hidden = !rights.nav;
+      Array.prototype.forEach.call($('barNav').querySelectorAll('[data-step]'), function (b) {
+        var s = b.getAttribute('data-step');
+        b.disabled = !rights.nav || ((s === 'first' || parseInt(s, 10) < 0) ? noBack : noFwd);
+      });   // 空白棋盤也要有：一手一手退回／重擺擺過的變化
       $('btnTeachClear').hidden = !rights.nav;
       $('btnTeachClear').disabled = !dm.moves.length && !dm.marks.length && !dm.undone.length && !dm.draw.length;
       $('btnTeachClear').textContent = lecture ? '清除盤面' : '結束試下';
@@ -734,7 +733,8 @@
       $('btnTeachEnd').textContent = g.demo.from === 'playing' ? '結束擺棋，回到對局' : '結束擺棋';
     }
     // 講解房：工具改成左側的大按鈕（lecTools），原本的工具框只在「輪流擺」時顯示輪到誰
-    $('boardBar').hidden = !(lecture && teachUi && rights.nav);
+    $('boardBar').hidden = !(lecture && demo);
+    if (lecture && demo) renderBar(g, dv, rights);
     renderLecTools(g, rights, lecture && teachUi);
     if (lecture) $('teachBox').hidden = !(teachUi && rights.turns);
 
@@ -1151,6 +1151,8 @@
         // 以資料庫裡最新的狀態再確認一次權限（老師可能剛好改了設定，或對方剛擺了一手）
         var r = demoRights(x);
         if (!r.stones) return false;
+        // 講解房載入棋譜後，在棋盤上擺棋就自動進入「試下」（結束試下會回到原來的棋譜局面）
+        if (x.lecture && x.record.moves.length && !x.demo.trial) M.demoTrial(x, true);
         if (r.turns) return myDemoTurn(x) && M.demoPlay(x, myDemoColor(x), idx);
         return M.demoPlay(x, color, idx);
       }).then(function (ok) {
@@ -1176,6 +1178,7 @@
   /* 畫完一筆畫線 */
   view.onStroke = function (stroke) {
     if (state.mode !== 'play' || state.game.status !== 'demo') return;
+    stroke.c = state.penColor;
     act(function (x) { return demoRights(x).marks && M.demoDraw(x, stroke); });
   };
 
@@ -1251,12 +1254,14 @@
     });
   }
   var FAR = 100000;   // 「進到最後」：步數給很大，走到不能走為止
-  $('teachNav').addEventListener('click', function (ev) {
+  function onNavClick(ev) {
     var btn = ev.target.closest('[data-step]');
     if (!btn || btn.disabled) return;
     var s = btn.getAttribute('data-step');
     teachStep(s === 'first' ? 'start' : s === 'last' ? FAR : parseInt(s, 10));
-  });
+  }
+  $('teachNav').addEventListener('click', onNavClick);
+  $('barNav').addEventListener('click', onNavClick);
   // 擺棋時也可以用鍵盤：← → 一手，PageUp／PageDown 十手，Home 回到開始下的局面，End 到最後
   document.addEventListener('keydown', function (ev) {
     if (state.mode !== 'play' || !demoRights(state.game).nav) return;
@@ -1630,9 +1635,95 @@
   function closePops() {
     if (!openPop) return;
     openPop = '';
-    Array.prototype.forEach.call($('lecTools').querySelectorAll('.pop'), function (p) { p.hidden = true; });
+    Array.prototype.forEach.call(document.querySelectorAll('#lecTools .pop, #boardBar .pop'), function (p) { p.hidden = true; });
     Array.prototype.forEach.call($('lecTools').querySelectorAll('[data-pop]'), function (b) { b.classList.remove('open'); });
   }
+
+  /* ---------- 棋盤下方：上一手／下一手、手數、試下、畫筆、標記 ---------- */
+  var PEN_COLORS = ['#e5322d', '#2f6fd6', '#1f9d55', '#f59e0b', '#8b5cf6', '#111111', '#ffffff'];
+  PEN_COLORS.forEach(function (c) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'swatch';
+    b.style.background = c;
+    b.setAttribute('data-color', c);
+    b.title = '畫筆顏色';
+    $('penColors').appendChild(b);
+  });
+  view.penColor = state.penColor;
+
+  function renderBar(g, dv, rights) {
+    var d = g.demo, tool = demoTool(g), total = G.countMoves(g.record);
+    var text;
+    if (d.trial) text = '試下 ' + (d.moves.length - d.trial.at) + ' 手';
+    else if (!g.record.moves.length) text = d.moves.length + '手';
+    else text = G.countMoves(g.record, dv.base) + '手/' + total;
+    $('barCount').textContent = text;
+    $('barCount').classList.toggle('trial', !!d.trial);
+    $('barTrial').hidden = !rights.stones && !rights.nav;
+    $('barTrial').classList.toggle('on', !!d.trial);
+    $('barTrial').title = d.trial ? '結束試下，回到原來的盤面' : '試下：擺完按這裡結束，就回到原來的盤面';
+    var isMark = STONE_TOOL[tool] === undefined && !DRAW_TOOL[tool];
+    $('barPen').parentNode.hidden = !rights.marks;
+    $('barMark').parentNode.hidden = !rights.marks;
+    $('barPen').classList.toggle('on', tool === 'pen');
+    $('barMark').classList.toggle('on', isMark);
+    $('barMark').firstChild.textContent = isMark ? ({ tri: '△', sq: '□', cir: '○', x: '✕', letter: 'A' })[tool] : '⑧';
+    $('barClearDraw').disabled = !d.draw.length;
+    Array.prototype.forEach.call($('penColors').children, function (b) {
+      b.classList.toggle('on', b.getAttribute('data-color') === state.penColor);
+    });
+    Array.prototype.forEach.call($('popMark').querySelectorAll('[data-tool]'), function (b) {
+      b.classList.toggle('on', b.getAttribute('data-tool') === tool);
+    });
+    $('popPen').hidden = openPop !== 'popPen';
+    $('popMark').hidden = openPop !== 'popMark';
+  }
+
+  $('barTrial').addEventListener('click', function () {
+    act(function (x) {
+      var r = demoRights(x);
+      if (!x.demo || !(r.stones || r.nav)) return false;
+      return M.demoTrial(x, !x.demo.trial);
+    });
+  });
+  $('barPen').addEventListener('click', function () {
+    // 按一下打開畫筆（同時跳出顏色）；已經在畫的話再按一下就收起畫筆
+    if (state.tool === 'pen' && openPop !== 'popPen') { state.tool = 'alt'; closePops(); render(); return; }
+    var was = openPop === 'popPen';
+    closePops();
+    state.tool = 'pen';
+    if (!was) openPop = 'popPen';
+    render();
+  });
+  $('penColors').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-color]');
+    if (!b) return;
+    state.penColor = b.getAttribute('data-color');
+    view.penColor = state.penColor;
+    state.tool = 'pen';
+    closePops();
+    render();
+  });
+  $('barClearDraw').addEventListener('click', function () {
+    closePops();
+    $('btnClearDraw').click();
+  });
+  $('barMark').addEventListener('click', function () {
+    var tool = state.tool, isMark = STONE_TOOL[tool] === undefined && !DRAW_TOOL[tool];
+    if (isMark && openPop !== 'popMark') { state.tool = 'alt'; closePops(); render(); return; }
+    var was = openPop === 'popMark';
+    closePops();
+    if (!was) openPop = 'popMark';
+    render();
+  });
+  $('popMark').addEventListener('click', function (ev) {
+    var b = ev.target.closest('[data-tool]');
+    if (!b) return;
+    state.tool = b.getAttribute('data-tool');
+    closePops();
+    render();
+  });
   function renderLecTools(g, rights, show) {
     var box = $('lecTools');
     box.hidden = !show;
@@ -1648,15 +1739,9 @@
     var isStone = STONE_TOOL[tool] !== undefined, isDraw = !!DRAW_TOOL[tool], isMark = !isStone && !isDraw;
     $('lecStoneBtn').textContent = isStone ? TOOL_LABEL[tool] : '交替落子';
     $('lecStoneBtn').classList.toggle('on', isStone);
-    $('lecMarkBtn').textContent = isMark ? TOOL_LABEL[tool] : '標記';
-    $('lecMarkBtn').classList.toggle('on', isMark);
-    $('lecDrawBtn').textContent = isDraw ? TOOL_LABEL[tool] : '畫線';
-    $('lecDrawBtn').classList.toggle('on', isDraw);
     Array.prototype.forEach.call(box.querySelectorAll('.pop [data-tool]'), function (b) {
       b.classList.toggle('on', b.getAttribute('data-tool') === tool);
     });
-    $('lecUndraw').disabled = !d.draw.length;
-    $('lecClearDraw').disabled = !d.draw.length;
     $('lecClearBtn').disabled = !d.moves.length && !d.marks.length && !d.undone.length && !d.draw.length;
     $('lecStuBtn').textContent = pick.who ? (pick.who === '*' ? '全部學生' : nick(pick.who)) + '・' + MODE_NAME[pick.mode] : '學生';
     $('lecStuBtn').classList.toggle('on', !!pick.who);
@@ -1695,17 +1780,15 @@
     }
     if ((el = t.closest('[data-act]'))) {
       var a = el.getAttribute('data-act');
-      if (a !== 'undraw') closePops();   // 擦一筆可以連續按
+      closePops();
       if (a === 'file') $('fileInput').click();
-      else if (a === 'undraw') $('btnUndraw').click();
-      else if (a === 'cleardraw') $('btnClearDraw').click();
       else if (a === 'clear') $('btnTeachClear').click();
       else if (a === 'quiz') (state.game && state.game.quiz ? $('btnQuizClose') : $('btnQuizOpen')).click();
     }
   });
   // 點選單以外的地方就收起選單
   document.addEventListener('click', function (ev) {
-    if (openPop && !ev.target.closest('#lecTools')) closePops();
+    if (openPop && !ev.target.closest('#lecTools') && !ev.target.closest('#boardBar')) { closePops(); render(); }
   });
 
   $('stageList').addEventListener('click', function (ev) {

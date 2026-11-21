@@ -26,7 +26,7 @@
       if (!self.drawMode || !self.size || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
       ev.preventDefault();
       var p = self.svgPoint(ev);
-      self._stroke = { t: self.drawMode, pts: [p.x, p.y], id: ev.pointerId };
+      self._stroke = { t: self.drawMode, pts: [p.x, p.y], id: ev.pointerId, c: self.penColor };
       try { svg.setPointerCapture(ev.pointerId); } catch (e) { /* 忽略 */ }
       self._drawLive();
     });
@@ -54,7 +54,7 @@
       if (pts.length === 2) pts = pts.concat([pts[0] + 1, pts[1]]);   // 只點一下：畫一個點
       var len = Math.abs(pts[pts.length - 2] - pts[0]) + Math.abs(pts[pts.length - 1] - pts[1]);
       if (st.t === 'arrow' && len < 40) return;   // 箭頭太短當成誤觸
-      if (self.onStroke) self.onStroke({ t: st.t, pts: pts });
+      if (self.onStroke) self.onStroke({ t: st.t, pts: pts, c: st.c });
     }
     svg.addEventListener('pointerup', finish);
     svg.addEventListener('pointercancel', function (ev) {
@@ -82,7 +82,8 @@
   /* 一筆畫線的 SVG */
   function strokeSvg(st) {
     var pts = st.pts, i, h = '';
-    var attr = ' fill="none" stroke="#e5322d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"';
+    var color = /^#[0-9a-fA-F]{6}$/.test(st.c || '') ? st.c : '#e5322d';
+    var attr = ' fill="none" stroke="' + color + '" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"';
     if (!pts || pts.length < 4) return '';
     if (st.t === 'arrow') {
       var x1 = pts[0], y1 = pts[1], x2 = pts[pts.length - 2], y2 = pts[pts.length - 1];

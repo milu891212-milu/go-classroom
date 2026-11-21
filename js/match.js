@@ -463,9 +463,10 @@
     var pts = (stroke.pts || []).slice(0, MAX_POINTS * 2).map(function (v) { return Math.round(+v || 0); });
     if (pts.length % 2) pts.pop();
     if (pts.length < 4) return false;
-    var d = game.demo;
+    var d = game.demo, st = { t: t, pts: pts };
+    if (/^#[0-9a-fA-F]{6}$/.test(stroke.c || '')) st.c = stroke.c;   // 畫筆顏色
     d.draw = d.draw || [];
-    d.draw.push({ t: t, pts: pts });
+    d.draw.push(st);
     if (d.draw.length > MAX_STROKES) d.draw.splice(0, d.draw.length - MAX_STROKES);
     return true;
   }
@@ -595,11 +596,12 @@
   /* 上一手：先收回擺的變化；變化都收完了，就往回退對局的著手（最多退到開始下的那一手） */
   function demoBack(game) {
     if (game.status !== 'demo') return false;
-    var d = game.demo;
-    if (d.moves.length) {
+    var d = game.demo, keep = d.trial ? d.trial.at : 0;   // 試下中：只收回試下的棋，不動試下前的盤面
+    if (d.moves.length > keep) {
       d.undone.push(d.moves.pop());
       return true;
     }
+    if (keep > 0) return false;
     var base = demoBase(game);
     if (base <= demoFloor(game)) return false;
     d.base = base - 1;
@@ -665,11 +667,34 @@
   function demoClear(game) {
     if (game.status !== 'demo') return false;
     var d = game.demo;
-    if (!d.moves.length && !d.undone.length && !d.marks.length && !(d.draw && d.draw.length)) return false;
+    if (!d.moves.length && !d.undone.length && !d.marks.length && !(d.draw && d.draw.length) && !d.trial) return false;
+    if (d.trial) d.base = d.trial.base;
     d.moves = [];
     d.undone = [];
     d.marks = [];
     d.draw = [];
+    delete d.trial;
+    return true;
+  }
+
+  /*
+   * 試下：從目前的盤面開始擺變化，結束試下就回到開始試下時的盤面（試下擺的棋全部拿掉）。
+   * demo.trial = { at: 開始時已經擺了幾手, base: 開始時停在棋譜第幾步 }
+   */
+  function demoTrial(game, on) {
+    if (game.status !== 'demo') return false;
+    var d = game.demo;
+    if (on) {
+      if (d.trial) return false;
+      d.trial = { at: d.moves.length, base: demoBase(game) };
+      d.undone = [];
+      return true;
+    }
+    if (!d.trial) return false;
+    d.moves = d.moves.slice(0, d.trial.at);
+    d.undone = [];
+    d.base = d.trial.base;
+    delete d.trial;
     return true;
   }
 
@@ -677,10 +702,19 @@
   function demoToStart(game) {
     if (game.status !== 'demo') return false;
     var d = game.demo, floor = demoFloor(game);
+    if (d.trial) {
+      // 試下中：回到開始試下的那一手
+      if (d.moves.length === d.trial.at && !d.undone.length && demoBase(game) === d.trial.base) return false;
+      d.moves = d.moves.slice(0, d.trial.at);
+      d.undone = [];
+      d.base = d.trial.base;
+      return true;
+    }
     if (!d.moves.length && !d.undone.length && demoBase(game) === floor) return false;
     d.moves = [];
     d.undone = [];
     d.base = floor;
+    delete d.trial;
     return true;
   }
 
@@ -750,11 +784,21 @@
         moves: toArray(d.moves).map(stone),
         undone: toArray(d.undone).map(stone),
         marks: toArray(d.marks).map(function (m) { return { p: m.p, t: m.t }; }),
-        draw: toArray(d.draw).map(function (s) { return { t: s.t === 'arrow' ? 'arrow' : 'pen', pts: toArray(s.pts) }; }),
+        draw: toArray(d.draw).map(function (s) {
+          var st = { t: s.t === 'arrow' ? 'arrow' : 'pen', pts: toArray(s.pts) };
+          if (s.c) st.c = s.c;
+          return st;
+        }),
         who: DEMO_WHO[d.who] ? d.who : 'teacher',
         stage: typeof d.stage === 'string' ? d.stage : ''
       };
       if (g.demo.who === 'stage' && !g.demo.stage) g.demo.who = 'teacher';
+      if (d.trial && typeof d.trial.at === 'number') {
+        g.demo.trial = {
+          at: Math.max(0, Math.min(g.demo.moves.length, d.trial.at)),
+          base: typeof d.trial.base === 'number' ? Math.max(0, Math.min(r.moves.length, d.trial.base)) : g.demo.base
+        };
+      }
       var q = g.quiz;
       g.quiz = q && (q.state === 'open' || q.state === 'shown') ? {
         n: q.n || 1,
@@ -793,6 +837,7 @@
     createLecture: createLecture,
     lectureLoad: lectureLoad,
     demoDraw: demoDraw,
+    demoTrial: demoTrial,
     demoUndraw: demoUndraw,
     demoView: demoView,
     demoNextColor: demoNextColor,

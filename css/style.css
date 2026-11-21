@@ -384,8 +384,26 @@ body.lecture-layout #board { max-width: calc(100dvh - var(--topbar) - 100px); }
   width: 100%; max-width: calc(100dvh - var(--topbar) - 100px); margin: 10px auto 0;
   padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
 }
-.board-bar .nav { flex: 1; }
-.board-bar .teach-title { white-space: nowrap; font-size: 14px; color: var(--ink); min-width: 5em; text-align: center; }
+.board-bar { justify-content: space-between; flex-wrap: wrap; }
+.bar-nav { display: flex; align-items: center; gap: 4px; }
+.bar-nav .btn { min-height: 40px; padding: 4px 10px; font-size: 15px; }
+.bar-nav .btn.fast { letter-spacing: -0.28em; padding-right: calc(10px + 0.28em); }
+.bar-count { min-width: 6.5em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar-count.trial { color: var(--accent-dark); }
+.bar-tools { display: flex; align-items: center; gap: 6px; }
+.bar-icon {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 54px; padding: 4px 8px; font: inherit; font-size: 20px; line-height: 1.1;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
+}
+.bar-icon small { font-size: 12px; font-weight: 600; }
+.bar-icon:hover { background: #faf6ee; }
+.bar-icon.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pop.up { top: auto; bottom: calc(100% + 8px); left: auto; right: 0; }
+.swatches { display: grid; grid-template-columns: repeat(4, 32px); gap: 8px; }
+.swatch { width: 32px; height: 32px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #bfb5a3; cursor: pointer; padding: 0; }
+.swatch.on { box-shadow: 0 0 0 3px var(--accent); }
+body.lecture-layout #teachNav, body.lecture-layout #teachWhere { display: none !important; }
 /* 左側操作區：場地資訊、工具、學生列表依序往下排 */
 body.lecture-layout #playBox #lectureBox { order: -2; }
 body.lecture-layout #playBox #teachBox { order: -1; }
