@@ -684,3 +684,9 @@ body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
 .stage-list .ico { width: 15px; height: 15px; vertical-align: -2px; }
 .voice-row .vname .ico { width: 15px; height: 15px; margin-right: 4px; vertical-align: -2px; }
 .hand-fab, .chat-fab { display: inline-flex; align-items: center; }
+
+/* 棋盤下方工具列不要超出外框：圖示按鈕照內容寬度，箭頭按鈕平分剩下的空間 */
+.board-bar { gap: 6px; overflow: hidden; }
+.board-bar .bar-icon { flex: 0 0 auto; padding: 0 9px; }
+.board-bar .bar-nav .btn { flex: 1 1 0; min-width: 0; padding: 0 4px; }
+.board-bar .bar-count { flex: 0 0 auto; min-width: 5.2em; }
