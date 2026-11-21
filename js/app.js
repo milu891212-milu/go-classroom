@@ -1135,6 +1135,11 @@
       act(function (x) { return M.toggleDead(x, idx); });
       return;
     }
+    if (g.status === 'demo' && g.quiz && online() && isTeacher()) {
+      // 答題中：老師點棋盤不落子；點藍點顯示選這裡的學生
+      showAnswerPop(g, idx);
+      return;
+    }
     if (g.status === 'demo' && studentAnswering(g)) {
       if (state.pos && state.pos.board[idx]) { toast('這裡已經有棋子了，請點空的位置'); return; }
       var me = session.account;
@@ -1613,8 +1618,34 @@
     return out;
   }
 
+  /* 老師點答題的藍點：在那一點旁邊跳出選這裡的學生 */
+  function showAnswerPop(g, idx) {
+    var pop = $('answerPop');
+    var grp = M.quizGroups(g).filter(function (x) { return x.p === idx; })[0];
+    if (!grp) {
+      pop.hidden = true;
+      toast('答題中，點棋盤不會落子；結束答題後才能擺');
+      return;
+    }
+    $('answerPopTitle').textContent = E.label(g.record.size, idx) + '　' + grp.names.length + ' 人';
+    $('answerPopNames').textContent = grp.names.map(nick).join('、');
+    // 用棋盤在畫面上的位置換算（不受縮放影響）
+    var svg = $('board'), xy = view.xy(idx), rect = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+    var s = { x: rect.left + xy.x * rect.width / vb.width, y: rect.top + xy.y * rect.height / vb.height };
+    pop.hidden = false;
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, s.x - w / 2)) + 'px';
+    var gap = 47 * rect.width / vb.width + 8;   // 棋子半徑＋一點空隙，名單不蓋住藍點
+    pop.style.top = (s.y - h - gap < 8 ? s.y + gap : s.y - h - gap) + 'px';
+  }
+  // 點別的地方或答題結束就收起
+  document.addEventListener('pointerdown', function (ev) {
+    if (!$('answerPop').hidden && !ev.target.closest('#board') && !ev.target.closest('#answerPop')) $('answerPop').hidden = true;
+  });
+
   /* 棋盤上要顯示的答案人數：只有老師看得到 */
   function quizMarks(g) {
+    if (!g.quiz) $('answerPop').hidden = true;
     if (!isTeacher()) return null;
     var q = g.quiz;
     if (!q || q.size !== g.record.size) return null;

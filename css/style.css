@@ -596,3 +596,12 @@ body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
   .bar-mode { flex-wrap: wrap; justify-content: center; }
   .bar-gap { display: none; }
 }
+
+/* 答題藍點的名單 */
+.answer-pop {
+  position: fixed; z-index: 55; max-width: 260px; padding: 8px 12px;
+  background: var(--surface); border: 2px solid #2f6fd6; border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22); font-size: 15px;
+}
+.answer-pop-title { font-weight: 700; color: #2f6fd6; }
+.answer-pop-names { margin-top: 2px; word-break: break-all; }

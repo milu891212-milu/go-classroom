@@ -241,7 +241,7 @@
       for (idx = 0; idx < opts.answers.length; idx++) {
         var an = opts.answers[idx];
         p = this.xy(an.p);
-        d += '<circle cx="' + p.x + '" cy="' + p.y + '" r="36" fill="#2f6fd6" opacity="0.85"' +
+        d += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + R + '" fill="#2f6fd6" opacity="0.88"' +
           (an.mine ? ' stroke="#ff9800" stroke-width="9"' : '') + '/>';
         d += '<text class="num" x="' + p.x + '" y="' + p.y + '" font-size="' + (String(an.label).length > 1 ? 38 : 50) +
           '" fill="#ffffff">' + String(an.label).replace(/[<>&"]/g, '') + '</text>';
