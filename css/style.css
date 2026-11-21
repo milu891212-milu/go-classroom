@@ -9,7 +9,7 @@
   --accent-soft: #e3f1ea;
   --danger: #b3261e;
   --radius: 14px;
-  --topbar: 56px;
+  --topbar: 42px;
 }
 
 * { box-sizing: border-box; }
@@ -33,7 +33,9 @@ body {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.topbar h1 { font-size: 18px; margin: 0; letter-spacing: 0.04em; }
+.topbar h1 { font-size: 15px; margin: 0; letter-spacing: 0.04em; white-space: nowrap; }
+.topbar .btn.small { min-height: 28px; padding: 2px 10px; font-size: 13px; }
+.topbar .tag { font-size: 12px; padding: 1px 8px; }
 .topbar .spacer { flex: 1; }
 .tag {
   font-size: 13px;
@@ -45,7 +47,7 @@ body {
 .tag:empty { display: none; }
 
 .tag.warn { background: #fde8e6; color: var(--danger); }
-.whoami { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.whoami { font-size: 13px; color: var(--muted); white-space: nowrap; }
 a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
 /* ---------- 登入與等待畫面 ---------- */
@@ -378,22 +380,22 @@ dialog .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-to
 
 /* ---------- 講解房版面 ---------- */
 body.lecture-layout .players { display: none; }
-body.lecture-layout #board { max-width: calc(100dvh - var(--topbar) - 100px); }
+body.lecture-layout #board { max-width: calc(100dvh - var(--topbar) - 62px); }
 .board-bar {
   display: flex; align-items: center; gap: 12px;
-  width: 100%; max-width: calc(100dvh - var(--topbar) - 100px); margin: 10px auto 0;
+  width: 100%; max-width: calc(100dvh - var(--topbar) - 62px); margin: 6px auto 0;
   padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
 }
-.board-bar { justify-content: space-between; flex-wrap: wrap; }
-.bar-nav { display: flex; align-items: center; gap: 4px; }
-.bar-nav .btn { min-height: 40px; padding: 4px 10px; font-size: 15px; }
-.bar-nav .btn.fast { letter-spacing: -0.28em; padding-right: calc(10px + 0.28em); }
-.bar-count { min-width: 6.5em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.board-bar { justify-content: space-between; flex-wrap: nowrap; gap: 8px; padding: 3px 8px; }
+.bar-nav { display: flex; align-items: center; gap: 3px; }
+.bar-nav .btn { min-height: 30px; padding: 0 8px; font-size: 13px; }
+.bar-nav .btn.fast { letter-spacing: -0.28em; padding-right: calc(8px + 0.28em); }
+.bar-count { min-width: 5.5em; font-size: 14px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bar-count.trial { color: var(--accent-dark); }
-.bar-tools { display: flex; align-items: center; gap: 6px; }
+.bar-tools { display: flex; align-items: center; gap: 4px; }
 .bar-icon {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  min-width: 54px; padding: 4px 8px; font: inherit; font-size: 20px; line-height: 1.1;
+  display: flex; flex-direction: row; align-items: center; gap: 3px;
+  height: 30px; padding: 0 8px; font: inherit; font-size: 15px; line-height: 1; white-space: nowrap;
   background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; cursor: pointer;
 }
 .bar-icon small { font-size: 12px; font-weight: 600; }
@@ -410,18 +412,18 @@ body.lecture-layout #playBox #teachBox { order: -1; }
 
 @media (min-width: 1101px) {
   body.dock .table {
-    grid-template-columns: 300px minmax(0, 1fr) 330px;
-    gap: 16px; padding: 12px 16px;
+    grid-template-columns: 290px minmax(0, 1fr) 320px;
+    gap: 12px; padding: 8px 12px;
   }
   body.dock .table > .panel { grid-column: 1; grid-row: 1; }
   body.dock .table > .board-wrap { grid-column: 2; grid-row: 1; }
   body.dock .table > .side-right { grid-column: 3; grid-row: 1; }
   body.dock .table > .panel, body.dock .side-right {
-    position: sticky; top: 12px;
-    max-height: calc(100dvh - var(--topbar) - 24px);
+    position: sticky; top: 8px;
+    max-height: calc(100dvh - var(--topbar) - 16px);
   }
   body.dock .table > .panel { overflow: visible; }
-  body.dock .side-right { display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - var(--topbar) - 24px); }
+  body.dock .side-right { display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - var(--topbar) - 16px); }
   body.dock .side-right .chat, body.dock .side-right .voice {
     position: static; width: auto; box-shadow: none; inset: auto;
   }
@@ -500,4 +502,11 @@ body.lecture-layout #btnQuizOpen, body.lecture-layout #btnQuizClose { display: n
   .topbar .btn.small { padding: 4px 8px; white-space: nowrap; }
   .topbar .tag { display: none; }
   .whoami { font-size: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+}
+
+/* 講解房：棋盤是主角，上下留白縮小 */
+body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
+@media (max-width: 700px) {
+  .board-bar { flex-wrap: wrap; justify-content: center; }
+  .bar-icon small { display: none; }
 }
