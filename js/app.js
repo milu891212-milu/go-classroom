@@ -611,7 +611,8 @@
     view.setSize(record.size);
     if (demo) {
       // 變化的棋子一律顯示 1、2、3…，方便講解順序
-      view.render({ board: answerBoard(g, dv.board), last: dv.last, numbers: dv.numbers, ko: -1, marks: g.demo.marks,
+      var shown = answerBoard(g, dv);
+      view.render({ board: shown.board, last: shown.last, numbers: shown.numbers, ko: -1, marks: g.demo.marks,
         draw: g.demo.draw, answers: quizMarks(g) });
     } else {
       view.render({
@@ -1597,14 +1598,19 @@
   }
 
   /* 一手答題：學生端在自己選的位置直接顯示一顆棋子（顏色是這題輪到的一方） */
-  function answerBoard(g, board) {
-    var q = g.quiz;
-    if (!q || isTeacher() || !online() || q.size !== g.record.size) return board;
+  /* 回傳 { board, numbers, last }：學生的答案當成下一手畫上去，並標上手數（例如白 4） */
+  function answerBoard(g, dv) {
+    var out = { board: dv.board, numbers: dv.numbers, last: dv.last }, q = g.quiz;
+    if (!q || isTeacher() || !online() || q.size !== g.record.size) return out;
     var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
-    if (!mine || board[mine.p]) return board;
-    var b = Array.prototype.slice.call(board);
-    b[mine.p] = q.c;
-    return b;
+    if (!mine || dv.board[mine.p]) return out;
+    var next = g.demo.moves.filter(function (m) { return !m.s; }).length + 1;
+    out.board = Array.prototype.slice.call(dv.board);
+    out.board[mine.p] = q.c;
+    out.numbers = Array.prototype.slice.call(dv.numbers);
+    out.numbers[mine.p] = next;
+    out.last = mine.p;
+    return out;
   }
 
   /* 棋盤上要顯示的答案人數：只有老師看得到 */
