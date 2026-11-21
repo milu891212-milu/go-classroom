@@ -500,7 +500,8 @@
   /* 老師出題：學生各自點一個位置 */
   function quizOpen(game) {
     if (game.status !== 'demo' || (game.quiz && game.quiz.state === 'open')) return false;
-    game.quiz = { n: ((game.quiz && game.quiz.n) || 0) + 1, state: 'open', size: game.record.size, answers: [] };
+    // c：這題是輪到哪一色下（學生端用這個顏色顯示自己的答案）
+    game.quiz = { n: ((game.quiz && game.quiz.n) || 0) + 1, state: 'open', size: game.record.size, c: demoNextColor(game), answers: [] };
     return true;
   }
 
@@ -562,12 +563,14 @@
   function demoView(game) {
     var base = demoBase(game);
     var pos = G.replay(game.record, base), numbers = new Uint16Array(pos.size * pos.size), last = pos.last;
-    var moves = game.demo ? game.demo.moves : [];
+    var moves = game.demo ? game.demo.moves : [], n = 0;
     for (var i = 0; i < moves.length; i++) {
       var r = E.place(pos, moves[i].c, moves[i].p, false);
       if (!r.ok) continue;
       for (var k = 0; k < r.captured.length; k++) numbers[r.captured[k]] = 0;
-      if (pos.board[moves[i].p]) numbers[moves[i].p] = i + 1;
+      if (moves[i].s) continue;   // 只落黑子／白子（擺題目）：不算手數、不標最後一手
+      n++;
+      if (pos.board[moves[i].p]) numbers[moves[i].p] = n;
       last = moves[i].p;
     }
     return { pos: pos, board: pos.board, numbers: numbers, last: last, base: base, total: game.record.moves.length };
@@ -576,19 +579,22 @@
   /* 擺變化時「黑白輪流」的下一手是誰：看盤上最後一手是誰下的，換另一方 */
   function demoNextColor(game) {
     var moves = game.demo ? game.demo.moves : [];
-    if (moves.length) return E.other(moves[moves.length - 1].c);
+    for (var i = moves.length - 1; i >= 0; i--) {
+      if (!moves[i].s) return E.other(moves[i].c);   // 擺題目的棋子不影響輪到誰
+    }
     var base = demoBase(game);
     return base >= game.record.moves.length ? game.turn : G.naturalTurn(game.record, base);
   }
 
-  /* 擺一顆變化的棋。color = 0 表示黑白輪流。會提子；已有棋子或禁著點不能下，打劫不限制。 */
-  function demoPlay(game, color, idx) {
+  /* 擺一顆變化的棋。color = 0 表示黑白輪流。會提子；已有棋子或禁著點不能下，打劫不限制。
+     setup = true 是「只落黑子／白子」擺題目：不算手數 */
+  function demoPlay(game, color, idx, setup) {
     if (game.status !== 'demo') return false;
     var c = color === BLACK || color === WHITE ? color : demoNextColor(game);
     var pos = demoView(game).pos;
     pos.ko = -1;
     if (E.check(pos, c, idx)) return false;
-    game.demo.moves.push({ c: c, p: idx });
+    game.demo.moves.push(setup ? { c: c, p: idx, s: 1 } : { c: c, p: idx });
     game.demo.undone = [];
     return true;
   }
@@ -784,7 +790,7 @@
     if (g.lecture) g.status = 'demo';
     if (g.status === 'demo') {
       var d = g.demo || {};
-      var stone = function (m) { return { c: m.c, p: m.p }; };
+      var stone = function (m) { return m.s ? { c: m.c, p: m.p, s: 1 } : { c: m.c, p: m.p }; };
       g.demo = {
         from: g.lecture ? 'lecture' : d.from === 'finished' ? 'finished' : 'playing',
         base: typeof d.base === 'number' ? Math.max(0, Math.min(r.moves.length, d.base)) : r.moves.length,
@@ -811,6 +817,7 @@
         n: q.n || 1,
         state: q.state,
         size: q.size || r.size,
+        c: q.c === WHITE ? WHITE : BLACK,
         answers: toArray(q.answers).filter(function (x) { return x && x.a; }).map(function (x) { return { a: x.a, p: x.p }; })
       } : null;
     } else {

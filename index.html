@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=27">
+<link rel="stylesheet" href="css/style.css?v=28">
 </head>
 <body>
 
@@ -316,7 +316,6 @@
             <button class="btn small" data-lsize="19">19路</button>
             <button class="btn small" data-lsize="13">13路</button>
             <button class="btn small" data-lsize="9">9路</button>
-            <button class="btn small" data-act="file">載入棋譜</button>
           </div>
         </div>
         <div class="pop-wrap" data-need="stones">
@@ -327,11 +326,8 @@
             <button class="btn small" data-tool="w">只落白子</button>
           </div>
         </div>
-        <div class="pop-wrap" data-need="quiz">
-          <button class="lec-btn" id="lecQuizBtn" data-act="quiz">一起答題</button>
-        </div>
-        <div class="pop-wrap" data-need="nav">
-          <button class="lec-btn" id="lecClearBtn" data-act="clear">清除盤面</button>
+        <div class="pop-wrap" data-need="admin">
+          <button class="lec-btn" data-act="file">載入棋譜</button>
         </div>
       </div>
 
@@ -372,6 +368,16 @@
       <label><input type="checkbox" id="optNumbers"> 顯示手數</label>
       <label id="optSoundRow"><input type="checkbox" id="optSound"> 音效與讀秒語音</label>
       <label id="optConfirmRow"><input type="checkbox" id="optConfirm"> 落子前先確認（手機建議開啟）</label>
+    </div>
+
+    <!-- 講解房左下：清空棋盤、一手答題 -->
+    <div class="lec-tools lec-bottom" id="lecBottom" hidden>
+      <div class="pop-wrap" data-need="nav">
+        <button class="lec-btn" id="lecClearBtn" data-act="clear">清空棋盤</button>
+      </div>
+      <div class="pop-wrap" data-need="quiz">
+        <button class="lec-btn" id="lecQuizBtn" data-act="quiz">一手答題</button>
+      </div>
     </div>
   </aside>
 </main>
@@ -526,15 +532,15 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=27"></script>
-<script src="js/engine.js?v=27"></script>
-<script src="js/sgf.js?v=27"></script>
-<script src="js/game.js?v=27"></script>
-<script src="js/match.js?v=27"></script>
-<script src="js/sound.js?v=27"></script>
-<script src="js/net.js?v=27"></script>
-<script src="js/voice.js?v=27"></script>
-<script src="js/board-view.js?v=27"></script>
-<script src="js/app.js?v=27"></script>
+<script src="js/config.js?v=28"></script>
+<script src="js/engine.js?v=28"></script>
+<script src="js/sgf.js?v=28"></script>
+<script src="js/game.js?v=28"></script>
+<script src="js/match.js?v=28"></script>
+<script src="js/sound.js?v=28"></script>
+<script src="js/net.js?v=28"></script>
+<script src="js/voice.js?v=28"></script>
+<script src="js/board-view.js?v=28"></script>
+<script src="js/app.js?v=28"></script>
 </body>
 </html>

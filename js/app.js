@@ -611,8 +611,8 @@
     view.setSize(record.size);
     if (demo) {
       // 變化的棋子一律顯示 1、2、3…，方便講解順序
-      view.render({ board: dv.board, last: dv.last, numbers: dv.numbers, ko: -1, marks: g.demo.marks, draw: g.demo.draw,
-        answers: quizMarks(g) });
+      view.render({ board: answerBoard(g, dv.board), last: dv.last, numbers: dv.numbers, ko: -1, marks: g.demo.marks,
+        draw: g.demo.draw, answers: quizMarks(g) });
     } else {
       view.render({
         board: pos.board,
@@ -1159,7 +1159,7 @@
         // 講解房載入棋譜後，在棋盤上擺棋就自動進入「試下」（結束試下會回到原來的棋譜局面）
         if (x.lecture && x.record.moves.length && !x.demo.trial) M.demoTrial(x, true);
         if (r.turns) return myDemoTurn(x) && M.demoPlay(x, myDemoColor(x), idx);
-        return M.demoPlay(x, color, idx);
+        return M.demoPlay(x, color, idx, color === BLACK || color === WHITE);   // 只落黑／白子＝擺題目，不算手數
       }).then(function (ok) {
         if (!ok && state.pos && !state.pos.board[idx]) toast('這裡是禁著點，不能下');
       });
@@ -1596,8 +1596,20 @@
     return online() && !isTeacher() && !!g.quiz && g.quiz.state === 'open';
   }
 
-  /* 棋盤上要顯示的答案：老師隨時看得到全部；學生在公布前只看得到自己的 */
+  /* 一手答題：學生端在自己選的位置直接顯示一顆棋子（顏色是這題輪到的一方） */
+  function answerBoard(g, board) {
+    var q = g.quiz;
+    if (!q || isTeacher() || !online() || q.size !== g.record.size) return board;
+    var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
+    if (!mine || board[mine.p]) return board;
+    var b = Array.prototype.slice.call(board);
+    b[mine.p] = q.c;
+    return b;
+  }
+
+  /* 棋盤上要顯示的答案人數：只有老師看得到 */
   function quizMarks(g) {
+    if (!isTeacher()) return null;
     var q = g.quiz;
     if (!q || q.size !== g.record.size) return null;
     var me = online() ? session.account : '';
@@ -1624,7 +1636,7 @@
     } else if (q) {
       var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
       title = '老師出題';
-      text = mine ? '你選了 ' + E.label(size, mine.p) + '（可以改）' : '點棋盤選下一手';
+      text = mine ? '你下在 ' + E.label(size, mine.p) + '（可以改）' : '輪到' + G.colorName(q.c) + '，點棋盤下一手';
     }
     $('quizTitle').textContent = title;
     $('quizText').textContent = text;
@@ -1686,8 +1698,9 @@
     $('barPenRow').hidden = barMode !== 'pen';
     $('barMarkRow').hidden = barMode !== 'mark';
     var text;
-    if (d.trial) text = '試下 ' + (d.moves.length - d.trial.at) + ' 手';
-    else if (!g.record.moves.length) text = d.moves.length + '手';
+    var played = function (from) { return d.moves.slice(from).filter(function (m) { return !m.s; }).length; };
+    if (d.trial) text = '試下 ' + played(d.trial.at) + ' 手';
+    else if (!g.record.moves.length) text = played(0) + '手';
     else text = G.countMoves(g.record, dv.base) + '手/' + total;
     $('barCount').textContent = text;
     $('barCount').classList.toggle('trial', !!d.trial);
@@ -1760,13 +1773,14 @@
   function renderLecTools(g, rights, show) {
     var box = $('lecTools');
     box.hidden = !show;
+    $('lecBottom').hidden = !show;
     if (!show) { closePops(); return; }
     var tool = demoTool(g), d = g.demo, pick = currentPick(g);
     var need = {
       admin: rights.admin, stones: rights.stones && !rights.turns, marks: rights.marks, nav: rights.nav,
       quiz: rights.admin && online()
     };
-    Array.prototype.forEach.call(box.querySelectorAll('[data-need]'), function (w) {
+    Array.prototype.forEach.call(document.querySelectorAll('#lecTools [data-need], #lecBottom [data-need]'), function (w) {
       w.hidden = !need[w.getAttribute('data-need')];
     });
     var isStone = STONE_TOOL[tool] !== undefined, isDraw = !!DRAW_TOOL[tool], isMark = !isStone && !isDraw;
@@ -1776,14 +1790,14 @@
       b.classList.toggle('on', b.getAttribute('data-tool') === tool);
     });
     $('lecClearBtn').disabled = !d.moves.length && !d.marks.length && !d.undone.length && !d.draw.length;
-    $('lecQuizBtn').textContent = g.quiz ? '結束答題' : '一起答題';
+    $('lecQuizBtn').textContent = g.quiz ? '結束答題' : '一手答題';
     $('lecQuizBtn').classList.toggle('on', !!g.quiz);
     Array.prototype.forEach.call(box.querySelectorAll('.pop'), function (p) { p.hidden = p.id !== openPop; });
     Array.prototype.forEach.call(box.querySelectorAll('[data-pop]'), function (b) {
       b.classList.toggle('open', b.getAttribute('data-pop') === openPop);
     });
   }
-  $('lecTools').addEventListener('click', function (ev) {
+  function onLecClick(ev) {
     var t = ev.target, el;
     if ((el = t.closest('[data-pop]'))) {
       var id = el.getAttribute('data-pop');
@@ -1815,7 +1829,9 @@
       else if (a === 'clear') $('btnTeachClear').click();
       else if (a === 'quiz') (state.game && state.game.quiz ? $('btnQuizClose') : $('btnQuizOpen')).click();
     }
-  });
+  }
+  $('lecTools').addEventListener('click', onLecClick);
+  $('lecBottom').addEventListener('click', onLecClick);
   // 點選單以外的地方就收起選單
   document.addEventListener('click', function (ev) {
     if (openPop && !ev.target.closest('#lecTools') && !ev.target.closest('#boardBar')) { closePops(); render(); }

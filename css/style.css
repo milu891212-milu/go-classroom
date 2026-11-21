@@ -521,6 +521,12 @@ body.dock .side-right .voice .chat-head { display: none; }
 .otag.muted { color: var(--danger); font-weight: 700; }
 .msg-sys { font-size: 13px; color: #2f6fd6; text-align: center; padding: 2px 0; }
 
+/* 講解房左下的按鈕放在最下面 */
+.lec-bottom { margin-top: auto; }
+@media (min-width: 1101px) {
+  body.dock .table > .panel { height: calc(100dvh - var(--topbar) - 16px); }
+}
+
 /* 寬螢幕打開聊天室時，主畫面往左讓出位置 */
 @media (min-width: 1101px) {
   body.chat-open .table, body.chat-open .home, body.chat-open .center { margin-right: 336px; }

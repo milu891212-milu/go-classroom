@@ -802,6 +802,20 @@
     eq(M0.normalize(throughDatabase(g)).demo.draw, g.demo.draw);
   });
 
+  test('擺題目：只落黑子／白子不算手數、不影響輪到誰；一手答題記下輪到的顏色', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(M0.demoPlay(g, B, 10, true), true); eq(M0.demoPlay(g, W, 11, true), true); eq(M0.demoPlay(g, W, 12, true), true);
+    var v = M0.demoView(g);
+    eq(v.numbers[10] + v.numbers[11] + v.numbers[12], 0, '擺題目的棋子沒有手數');
+    eq(M0.demoNextColor(g), B, '擺完題目還是黑先');
+    eq(M0.demoPlay(g, 0, 40), true);
+    eq(M0.demoView(g).numbers[40], 1, '接著下的第一手是 1');
+    eq(M0.demoNextColor(g), W);
+    eq(M0.normalize(throughDatabase(g)).demo.moves[0], { c: B, p: 10, s: 1 }, '經過資料庫還記得是擺題目');
+    M0.quizOpen(g);
+    eq(g.quiz.c, W, '題目輪到白');
+  });
+
   var pass = results.filter(function (r) { return r.ok; }).length;
   document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
   document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';
