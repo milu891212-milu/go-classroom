@@ -243,8 +243,9 @@
         p = this.xy(an.p);
         d += '<circle cx="' + p.x + '" cy="' + p.y + '" r="' + R + '" fill="#2f6fd6" opacity="0.88"' +
           (an.mine ? ' stroke="#ff9800" stroke-width="9"' : '') + '/>';
-        d += '<text class="num" x="' + p.x + '" y="' + p.y + '" font-size="' + (String(an.label).length > 1 ? 38 : 50) +
-          '" fill="#ffffff">' + String(an.label).replace(/[<>&"]/g, '') + '</text>';
+        // 數字以字形本身置中（central 基線會讓數字偏下一點）
+        d += '<text class="num" x="' + p.x + '" y="' + p.y + '" style="dominant-baseline:alphabetic" dy="0.355em" font-size="' +
+          (String(an.label).length > 1 ? 38 : 50) + '" fill="#ffffff">' + String(an.label).replace(/[<>&"]/g, '') + '</text>';
       }
     }
     this.drawLayer.innerHTML = d;

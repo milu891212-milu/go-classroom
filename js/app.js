@@ -815,7 +815,8 @@
     if (state.mode === 'play' && g.status === 'demo') {
       // 擺棋：選的是擺子工具時，預覽下一顆會是什麼顏色
       var r = demoRights(g), fixed = STONE_TOOL[demoTool(g)];
-      if (studentAnswering(g) || !r.stones || fixed === undefined || state.hover < 0 || (r.turns && !myDemoTurn(g))) {
+      // 答題中：老師、學生都不顯示預覽棋子，只留滑鼠游標
+      if (g.quiz || studentAnswering(g) || !r.stones || fixed === undefined || state.hover < 0 || (r.turns && !myDemoTurn(g))) {
         view.setGhost(-1);
         return;
       }
