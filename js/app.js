@@ -23,6 +23,17 @@
   var stopWatching = [];
   var loginState = { ready: false, authKnown: false, failed: '' };
 
+  /* 暱稱（config.js 的 names）：畫面上顯示用，資料裡仍然用帳號 */
+  var NICK = (function () {
+    var src = (window.GO_CONFIG && window.GO_CONFIG.names) || {}, out = {};
+    Object.keys(src).forEach(function (k) { if (src[k]) out[k.toLowerCase()] = String(src[k]); });
+    return out;
+  })();
+  function nick(account) { return NICK[String(account || '').toLowerCase()] || account; }
+  function nameOf(account, role) {
+    return role === 'teacher' ? (NICK[String(account || '').toLowerCase()] || '老師') : nick(account);
+  }
+
   function online() { return !!session; }
   function isTeacher() { return online() && session.role === 'teacher'; }
   function now() { return online() ? net.now() : Date.now(); }
@@ -321,11 +332,11 @@
     var me = online() && !teacher && !!name && name === session.account;
     if (who === 'teacher') return isToast ? '回到老師擺' : teacher ? '' : '請看棋盤';
     if (who === 'free') return teacher ? '全部學生都可以擺' : '大家都可以擺';
-    if (who === 'stage') return teacher ? name + ' 自由擺' : me ? (isToast ? '老師請你上台擺！' : '你可以擺') : name + ' 在擺';
+    if (who === 'stage') return teacher ? nick(name) + ' 自由擺' : me ? (isToast ? '老師請你上台擺！' : '你可以擺') : nick(name) + ' 在擺';
     var c = who === 'black' ? '黑' : '白', t = who === 'black' ? '白' : '黑';
-    if (teacher) return (name || '全部學生') + '持' + c + '，跟老師輪流擺';
+    if (teacher) return (name ? nick(name) : '全部學生') + '持' + c + '，跟老師輪流擺';
     if (!name || me) return '你持' + c + '、老師持' + t + '，輪流擺';
-    return name + '持' + c + '，跟老師輪流擺';
+    return nick(name) + '持' + c + '，跟老師輪流擺';
   }
 
   /* 比對前後狀態，發出對應的音效與提示（自己或對方的動作都走這裡） */
@@ -433,7 +444,7 @@
 
     $('btnHome').hidden = !(m === 'review' || (m === 'play' && (!online() || isTeacher())));
     $('who').hidden = !online();
-    if (online()) $('who').textContent = session.account + '・' + (isTeacher() ? '老師' : '學生');
+    if (online()) $('who').textContent = nick(session.account) + '・' + (isTeacher() ? '老師' : '學生');
     $('btnLogout').hidden = !online();
     $('btnLogout').textContent = net && net.kind === 'demo' ? '離開測試' : '登出';
     $('btnLogin').hidden = !(net && !online() && m !== 'login');
@@ -485,7 +496,7 @@
   function cardName(record, color) {
     var g = state.game;
     if (state.mode === 'play' && online() && g.teacherColor) {
-      return (g.teacherColor === color ? '老師' : (g.student || '學生')) + (myColor() === color ? '（你）' : '');
+      return (g.teacherColor === color ? '老師' : (g.student ? nick(g.student) : '學生')) + (myColor() === color ? '（你）' : '');
     }
     return playerName(record.info, color === BLACK);
   }
@@ -1409,7 +1420,7 @@
   function fillStudents(sel) {
     var keep = sel.value, list = onlineStudents(), html = [];
     sel.textContent = '';
-    list.forEach(function (a) { html.push([a, a]); });
+    list.forEach(function (a) { html.push([a, nick(a)]); });
     html.push(['', list.length ? '任何學生都可以下' : '任何學生（目前沒有學生在線）']);
     html.forEach(function (pair) {
       var o = document.createElement('option');
@@ -1431,7 +1442,7 @@
       now[k] = true;
       if (!first && !handsSeen[k] && isTeacher()) {
         Sound.notice();
-        toast('🙋 ' + h.a + ' 舉手了');
+        toast('🙋 ' + nick(h.a) + ' 舉手了');
       }
     });
     handsSeen = now;
@@ -1480,7 +1491,7 @@
       var b = document.createElement('button'), on = a === pick.who;
       b.type = 'button';
       b.className = 'btn' + (on ? ' on' : handUp(a) ? ' raised' : '');
-      b.textContent = (handUp(a) ? '🙋 ' : '') + (a === '*' ? '全部學生' : a) + (on ? '（' + MODE_NAME[pick.mode] + '）' : '');
+      b.textContent = (handUp(a) ? '🙋 ' : '') + (a === '*' ? '全部學生' : nick(a)) + (on ? '（' + MODE_NAME[pick.mode] + '）' : '');
       b.setAttribute('data-stage', a);
       box.appendChild(b);
     });
@@ -1492,7 +1503,7 @@
     if (!g || g.status !== 'demo') return;
     stuTarget = a;
     var pick = currentPick(g);
-    $('stuTitle').textContent = a === '*' ? '全部學生' : a;
+    $('stuTitle').textContent = a === '*' ? '全部學生' : nick(a);
     Array.prototype.forEach.call($('stuOptions').querySelectorAll('[data-mode]'), function (b) {
       var m = b.getAttribute('data-mode');
       b.hidden = m === 'teacher' && pick.who !== a;
@@ -1544,7 +1555,7 @@
       groups.forEach(function (grp) {
         var row = document.createElement('div'), a = document.createElement('b'), names = document.createElement('span');
         a.textContent = E.label(size, grp.p);
-        names.textContent = grp.names.length + ' 人：' + grp.names.join('、');
+        names.textContent = grp.names.length + ' 人：' + grp.names.map(nick).join('、');
         row.appendChild(a);
         row.appendChild(names);
         res.appendChild(row);
@@ -1598,7 +1609,7 @@
   }
 
   function voiceName(m) {
-    return (m.r === 'teacher' ? '老師' : m.a) + (voice && m.pid === voice.pid ? '（你）' : '');
+    return nameOf(m.a, m.r) + (voice && m.pid === voice.pid ? '（你）' : '');
   }
 
   function renderVoice() {
@@ -1732,7 +1743,7 @@
     chat.locked = false;
     chat.open = false;
   }
-  function speaker(m) { return m.r === 'teacher' ? '老師' : m.a; }
+  function speaker(m) { return nameOf(m.a, m.r); }
   function isMine(m) { return online() && m.a === session.account && m.r === session.role; }
   function canChat() { return online() && (isTeacher() || !chat.locked); }
 
@@ -1755,7 +1766,7 @@
     people.forEach(function (p, i) {
       if (i) box.appendChild(document.createTextNode('、'));
       var b = document.createElement('b');
-      b.textContent = (p.role === 'student' && handUp(p.account) ? '🙋' : '') + (p.role === 'teacher' ? '老師' : p.account) +
+      b.textContent = (p.role === 'student' && handUp(p.account) ? '🙋' : '') + nameOf(p.account, p.role) +
         (online() && p.account === session.account && p.role === session.role ? '（你）' : '');
       box.appendChild(b);
     });

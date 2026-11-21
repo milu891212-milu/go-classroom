@@ -30,6 +30,12 @@ window.GO_CONFIG = {
     iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }]
   },
 
+  // 暱稱：登入用英文帳號，畫面上顯示這裡的名字（聊天室、在線名單、學生列表、語音、答題統計…）。
+  // 沒列在這裡的帳號就直接顯示帳號名稱；老師沒設定暱稱時顯示「老師」。
+  names: {
+    // student1: '小明',
+  },
+
   rooms: [
     { id: 'main',  teacher: 'teacher',  students: ['student1'] },
     { id: 'room2', teacher: 'teacher2', students: ['student2'] }
