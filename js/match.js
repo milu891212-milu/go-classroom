@@ -436,7 +436,17 @@
       moves: [], undone: [], marks: [], draw: [],
       who: 'teacher', stage: ''
     };
+    game.classState = 'ready';   // 'ready' 準備上課、'on' 上課中、'over' 下課
     return game;
+  }
+
+  var CLASS_STATES = { ready: true, on: true, over: true };
+
+  /* 講解房：上課／下課 */
+  function setClass(game, st) {
+    if (!game.lecture || !CLASS_STATES[st] || game.classState === st) return false;
+    game.classState = st;
+    return true;
   }
 
   /* 講解房換一份棋譜（或換成空白棋盤）：變化、標記、畫線都清掉，學生權限保留 */
@@ -787,6 +797,8 @@
     g.student = typeof g.student === 'string' ? g.student : '';
     g.rule = g.rule === 'territory' ? 'territory' : 'area';
     g.lecture = !!g.lecture;
+    if (g.lecture) g.classState = CLASS_STATES[g.classState] ? g.classState : 'ready';
+    else delete g.classState;
     if (g.lecture) g.status = 'demo';
     if (g.status === 'demo') {
       var d = g.demo || {};
@@ -852,6 +864,7 @@
     lectureLoad: lectureLoad,
     demoDraw: demoDraw,
     demoTrial: demoTrial,
+    setClass: setClass,
     demoUnmark: demoUnmark,
     demoUndraw: demoUndraw,
     demoView: demoView,

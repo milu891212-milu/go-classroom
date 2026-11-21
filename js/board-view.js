@@ -237,6 +237,14 @@
     var d = '';
     if (opts.draw) for (idx = 0; idx < opts.draw.length; idx++) d += strokeSvg(opts.draw[idx]);
     // 一起答題的答案：藍色圓點，上面寫人數（或文字）；自己的答案加橘色外框
+    // 浮水印（例如講解房還沒上課時的「準備上課」）
+    if (opts.watermark) {
+      var span = (size - 1) * CELL + MARGIN * 2, fsz = Math.round(span * 0.13);
+      d += '<text x="' + span / 2 + '" y="' + span / 2 + '" font-size="' + fsz + '" font-weight="800" ' +
+        'fill="#ffffff" fill-opacity="0.55" stroke="#c9974a" stroke-opacity="0.35" stroke-width="' + Math.round(fsz / 30) + '" ' +
+        'style="font-family: \'Noto Sans TC\', \'Microsoft JhengHei\', sans-serif; letter-spacing: 0.1em">' +
+        String(opts.watermark).replace(/[<>&"]/g, '') + '</text>';
+    }
     if (opts.answers) {
       for (idx = 0; idx < opts.answers.length; idx++) {
         var an = opts.answers[idx];

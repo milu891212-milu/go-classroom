@@ -130,6 +130,15 @@
     /* 停一手、申請被同意等一般提示 */
     notice: function () { tone(660, 0, 0.12, 0.2); },
 
+    /* 上課／下課的鐘聲（學校的「噹噹噹噹」）：up = true 上課、false 下課 */
+    chime: function (up) {
+      var notes = up ? [659.25, 523.25, 587.33, 392.0] : [392.0, 587.33, 659.25, 523.25];
+      for (var i = 0; i < notes.length; i++) {
+        tone(notes[i], i * 0.42, 1.1, 0.22, 'sine');
+        tone(notes[i] * 2, i * 0.42, 0.6, 0.05, 'sine');   // 一點泛音，聽起來比較像鐘
+      }
+    },
+
     /* 對局結束 */
     end: function () {
       tone(523, 0, 0.18, 0.25);

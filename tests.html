@@ -816,6 +816,17 @@
     eq(g.quiz.c, W, '題目輪到白');
   });
 
+  test('上課／下課：講解房一開始是準備上課，經過資料庫一致；一般對局沒有這個狀態', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    eq(g.classState, 'ready');
+    eq(M0.setClass(g, 'on'), true); eq(M0.setClass(g, 'on'), false, '重複設定不動作');
+    eq(M0.normalize(throughDatabase(g)).classState, 'on');
+    eq(M0.setClass(g, 'over'), true);
+    var n = M.create(G.newRecord({ size: 9 }), 0, B, null, 0);
+    eq(M0.setClass(n, 'on'), false, '一般對局不能上課');
+    eq(M0.normalize(throughDatabase(n)).classState, undefined);
+  });
+
   var pass = results.filter(function (r) { return r.ok; }).length;
   document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
   document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';
