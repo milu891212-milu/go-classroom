@@ -1805,14 +1805,8 @@
   $('stuOptions').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-mode]');
     if (!b || !isTeacher()) return;
-    var a = stuTarget, m = b.getAttribute('data-mode');
     $('dlgStudent').close();
-    act(function (x) {
-      if (!x.demo) return false;
-      if (m === 'teacher') return M.demoSetWho(x, 'teacher');
-      if (a === '*') return m === 'stage' ? M.demoSetWho(x, 'free') : M.demoSetWho(x, m, '');
-      return M.demoSetWho(x, m, a);
-    }).then(function (ok) { if (ok && m !== 'teacher' && a !== '*' && handUp(a)) net.lowerHand(a); });
+    applyStudentMode(stuTarget, b.getAttribute('data-mode'));
   });
   $('btnQuizOpen').addEventListener('click', function () { act(function (x) { return M.quizOpen(x); }); });
   $('btnQuizClose').addEventListener('click', function () { act(function (x) { return M.quizClose(x); }); });
@@ -1879,18 +1873,26 @@
     $('btnMic').textContent = v.micOn ? '🎤 我的麥克風：開（按一下關掉）' : '🔇 我的麥克風：關（按一下打開）';
     $('btnMic').classList.toggle('on', v.micOn && can);
 
+    // 精簡版：沒加入只有「加入語音」；加入後是「語音中／收聽中」＋麥克風＋離開
     var hint = $('voiceHint'), warn = false, text = '';
-    if (v.micError) { text = v.micError; warn = true; }
-    else if (!v.joined) text = teacherIn ? '老師在語音裡，按「加入語音」就聽得到。' : '加入語音後就能和大家說話。';
-    else if (!teacher && !can) text = '老師還沒開放你說話，你聽得到大家。想說話可以先舉手。';
-    else if (!teacher && can) text = v.micOn ? '老師開放你說話了，大家聽得到你。' : '老師開放你說話了，打開麥克風就能說。';
+    if (v.joined) text = v.micError ? '只能聽' : (teacher || can) ? '語音中' : '收聽中';
+    if (v.micError && v.joined) warn = true;
     hint.textContent = text;
+    hint.title = v.micError || '';
     hint.classList.toggle('warn', warn);
+    $('btnMic').hidden = !v.joined || !v.stream || !(teacher || can);
+    $('btnMic').textContent = v.micOn ? '🎤 開' : '🔇 關';
+    $('btnVoiceJoin').hidden = v.joined;
+    $('btnVoiceLeave').hidden = !v.joined;
+    if (v.micError && voiceSeen.err !== v.micError) toast(v.micError);
+    voiceSeen.err = v.micError;
 
-    $('voiceAllRow').hidden = !teacher;
+    $('voiceAllRow').hidden = true;
     $('voiceAllowAll').checked = v.allow.all;
 
+    renderPeople();   // 在線名單上的「連」跟著更新
     var list = $('voiceList');
+    list.hidden = true;
     list.textContent = '';
     if (!members.length) {
       var empty = document.createElement('div');
@@ -2006,23 +2008,73 @@
     if (!people.length) { box.textContent = '目前沒有人在線上'; return; }
     var rows = people.slice();
     if (teaching && people.some(function (p) { return p.role === 'student'; })) rows.splice(1, 0, { account: '*', role: 'all' });
+    var v = voice, inVoice = {};
+    if (v) v.members.forEach(function (m) { inVoice[m.r + '|' + m.a] = true; });
+    if (!isTeacher()) ctlOpen = '';
     rows.forEach(function (p) {
       var student = p.role === 'student' || p.role === 'all';
-      var row = document.createElement(teaching && student ? 'button' : 'div');
-      if (teaching && student) { row.type = 'button'; row.setAttribute('data-stage', p.account); }
+      var row = document.createElement('div');
       var on = teaching && pick.who === p.account;
-      row.className = 'online-row' + (on ? ' on' : '') + (teaching && student ? ' clickable' : '');
+      row.className = 'online-row' + (on ? ' on' : '');
       var name = document.createElement('span'), tag = document.createElement('span');
       name.className = 'oname';
       name.textContent = (p.role === 'student' && handUp(p.account) ? '🙋 ' : '') +
+        (inVoice[p.role + '|' + p.account] ? '🎧 ' : '') +
         (p.role === 'all' ? '全部學生' : nameOf(p.account, p.role)) +
         (online() && p.account === session.account && p.role === session.role ? '（你）' : '');
       tag.className = 'otag';
       tag.textContent = on ? MODE_NAME[pick.mode] : p.role === 'teacher' ? '老師' : p.role === 'all' ? '' : '學生';
       row.appendChild(name);
       row.appendChild(tag);
+      if (isTeacher() && student) {
+        // 連：開放說話；控：讓他操作棋盤
+        var talk = v ? (p.account === '*' ? v.allow.all : v.allowed(p.account, 'student')) : false;
+        var lian = document.createElement('button');
+        lian.type = 'button';
+        lian.className = 'obtn' + (talk ? ' on' : '');
+        lian.textContent = '連';
+        lian.title = talk ? '關閉他的麥克風' : '開放他說話';
+        lian.setAttribute('data-talk', p.account);
+        lian.disabled = !v || (p.account !== '*' && v.allow.all);
+        var kong = document.createElement('button');
+        kong.type = 'button';
+        kong.className = 'obtn' + (on ? ' on' : '');
+        kong.textContent = '控';
+        kong.title = teaching ? '讓他操作棋盤' : '開講解房或擺棋時才能用';
+        kong.setAttribute('data-ctl', p.account);
+        kong.disabled = !teaching;
+        row.appendChild(lian);
+        row.appendChild(kong);
+        if (teaching && ctlOpen === p.account) {
+          var menu = document.createElement('div');
+          menu.className = 'ctl-menu';
+          [['stage', '學生控制'], ['teacher', '老師控制'], ['black', '學生執黑'], ['white', '學生執白']].forEach(function (o) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn small' + ((o[0] === 'teacher' ? !on : on && pick.mode === o[0]) ? ' on' : '');
+            b.textContent = o[1];
+            b.setAttribute('data-mode', o[0]);
+            menu.appendChild(b);
+          });
+          row.appendChild(menu);
+        }
+      }
       box.appendChild(row);
     });
+  }
+  var ctlOpen = '';   // 「控」選單目前開在哪位學生
+
+  /* 老師設定某位學生（'*' 全部學生）的擺法：'stage' 學生控制、'teacher' 老師控制、'black'／'white' 學生執黑／執白 */
+  function applyStudentMode(a, m) {
+    act(function (x) {
+      if (!x.demo) return false;
+      if (m === 'teacher') {
+        var cur = currentPick(x);
+        return cur.who === a ? M.demoSetWho(x, 'teacher') : false;
+      }
+      if (a === '*') return m === 'stage' ? M.demoSetWho(x, 'free') : M.demoSetWho(x, m, '');
+      return M.demoSetWho(x, m, a);
+    }).then(function (ok) { if (ok && m !== 'teacher' && a !== '*' && handUp(a)) net.lowerHand(a); });
   }
 
   function renderChatList() {
@@ -2140,10 +2192,17 @@
     renderChat();
   }
 
+  var CHAT_GAP = 5000;   // 學生每則留言至少間隔 5 秒，避免刷頻
   function sendChat(kind, text) {
-    if (!canChat()) { toast('老師開啟了禁言，現在不能發言'); return; }
+    if (!canChat()) { toast('老師開啟了禁言，現在不能發言'); return false; }
+    if (!isTeacher()) {
+      var wait = CHAT_GAP - (Date.now() - (chat.lastSent || 0));
+      if (wait > 0) { toast('請等 ' + Math.ceil(wait / 1000) + ' 秒再留言'); return false; }
+      chat.lastSent = Date.now();
+    }
     chat.forceScroll = true;
     net.sendChat({ k: kind, x: text }).then(null, function () { toast('連線有問題，訊息沒有送出'); });
+    return true;
   }
 
   // 第一次載入時把貼圖按鈕放好
@@ -2172,8 +2231,7 @@
     ev.preventDefault();
     var text = $('chatInput').value.trim();
     if (!text) return;
-    $('chatInput').value = '';
-    sendChat('text', text);
+    if (sendChat('text', text)) $('chatInput').value = '';   // 太快送出時保留打好的字
   });
   $('chatQuick').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-quick]');
@@ -2213,8 +2271,33 @@
   });
   // 在線分頁：老師點學生 → 選擇怎麼跟他擺棋
   $('chatPeople').addEventListener('click', function (ev) {
-    var b = ev.target.closest('[data-stage]');
-    if (b && isTeacher()) openStudentDialog(b.getAttribute('data-stage'));
+    if (!isTeacher()) return;
+    var b;
+    if ((b = ev.target.closest('[data-talk]'))) {
+      var a = b.getAttribute('data-talk');
+      var on = a === '*' ? !(voice && voice.allow.all) : !(voice && voice.allowed(a, 'student'));
+      (a === '*' ? net.setVoiceAllowAll(on) : net.setVoiceAllow(a, on)).then(function () {
+        toast((a === '*' ? '全部學生' : nick(a)) + (on ? '：可以說話' : '：關閉麥克風'));
+      }, function () { toast('連線有問題，沒有設定成功'); });
+      return;
+    }
+    if ((b = ev.target.closest('[data-ctl]'))) {
+      var who = b.getAttribute('data-ctl');
+      ctlOpen = ctlOpen === who ? '' : who;
+      renderPeople();
+      return;
+    }
+    if ((b = ev.target.closest('[data-mode]'))) {
+      var target = ctlOpen;
+      ctlOpen = '';
+      applyStudentMode(target, b.getAttribute('data-mode'));
+      renderPeople();
+    }
+  });
+  document.addEventListener('click', function (ev) {
+    // 名單會重畫，按鈕可能已經不在畫面上，所以看事件發生當下的路徑
+    var inside = (ev.composedPath ? ev.composedPath() : []).some(function (el) { return el && el.id === 'chatPeople'; });
+    if (ctlOpen && !inside) { ctlOpen = ''; renderPeople(); }
   });
   $('chatLock').addEventListener('change', function () {
     if (!isTeacher()) return;

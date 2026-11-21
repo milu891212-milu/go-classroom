@@ -494,6 +494,29 @@ body.lecture-layout #btnQuizOpen, body.lecture-layout #btnQuizClose { display: n
 .online-row.on .otag { color: var(--accent-dark); font-weight: 700; }
 .chat-admin { border-top: 1px solid var(--line); border-bottom: none; padding: 8px 12px; }
 
+/* ---------- 語音（精簡）與在線名單的「連」「控」 ---------- */
+.voice-body { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+.voice-body .btn { min-height: 34px; padding: 2px 12px; font-size: 14px; }
+.voice-body #btnVoiceJoin { flex: 1; }
+.voice-body .voice-hint { flex: 1; font-weight: 600; color: var(--accent-dark); }
+.voice-body .voice-hint.warn { color: var(--danger); }
+body.dock .side-right .voice .chat-head { display: none; }
+.online-row { position: relative; }
+.obtn {
+  width: 30px; height: 30px; flex: none; border-radius: 50%; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 700; line-height: 1;
+  background: #f1ece2; color: var(--muted); border: 1px solid var(--line);
+}
+.obtn:disabled { opacity: 0.4; cursor: default; }
+.obtn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ctl-menu {
+  position: absolute; right: 6px; top: calc(100% + 4px); z-index: 20;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px; min-width: 120px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 10px 24px rgba(60, 40, 10, 0.2);
+}
+.ctl-menu .btn { border-radius: 999px; }
+
 /* 寬螢幕打開聊天室時，主畫面往左讓出位置 */
 @media (min-width: 1101px) {
   body.chat-open .table, body.chat-open .home, body.chat-open .center { margin-right: 336px; }

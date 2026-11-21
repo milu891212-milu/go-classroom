@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=25">
+<link rel="stylesheet" href="css/style.css?v=26">
 </head>
 <body>
 
@@ -513,28 +513,28 @@
     <button class="btn small" id="voiceClose" aria-label="收起語音">收起</button>
   </header>
   <div class="voice-body">
-    <button class="btn primary wide" id="btnVoiceJoin">加入語音</button>
-    <button class="btn wide" id="btnMic" hidden></button>
-    <p class="voice-hint" id="voiceHint"></p>
+    <button class="btn primary" id="btnVoiceJoin">🎧 加入語音</button>
+    <span class="voice-hint" id="voiceHint"></span>
+    <button class="btn" id="btnMic" hidden></button>
+    <button class="btn" id="btnVoiceLeave" hidden>離開</button>
+    <!-- 舊的名單與全部開放：改在「在線」分頁用「連」按鈕控制 -->
     <label class="voice-all" id="voiceAllRow" hidden><input type="checkbox" id="voiceAllowAll"> 全部學生都可以說話</label>
-    <div class="voice-list" id="voiceList"></div>
-    <button class="btn wide" id="btnVoiceLeave" hidden>離開語音</button>
-    <p class="hint">建議戴耳機，避免回音。</p>
+    <div class="voice-list" id="voiceList" hidden></div>
   </div>
 </aside>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=25"></script>
-<script src="js/engine.js?v=25"></script>
-<script src="js/sgf.js?v=25"></script>
-<script src="js/game.js?v=25"></script>
-<script src="js/match.js?v=25"></script>
-<script src="js/sound.js?v=25"></script>
-<script src="js/net.js?v=25"></script>
-<script src="js/voice.js?v=25"></script>
-<script src="js/board-view.js?v=25"></script>
-<script src="js/app.js?v=25"></script>
+<script src="js/config.js?v=26"></script>
+<script src="js/engine.js?v=26"></script>
+<script src="js/sgf.js?v=26"></script>
+<script src="js/game.js?v=26"></script>
+<script src="js/match.js?v=26"></script>
+<script src="js/sound.js?v=26"></script>
+<script src="js/net.js?v=26"></script>
+<script src="js/voice.js?v=26"></script>
+<script src="js/board-view.js?v=26"></script>
+<script src="js/app.js?v=26"></script>
 </body>
 </html>
