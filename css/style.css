@@ -461,6 +461,39 @@ body.lecture-layout #btnQuizOpen, body.lecture-layout #btnQuizClose { display: n
 .pop-wrap:nth-child(3n) .pop { left: auto; right: 0; }
 #popStu { width: 240px; }
 
+/* ---------- 聊天室分頁 ---------- */
+.chat-head { padding: 6px 10px; }
+.chat-tabs { display: flex; gap: 4px; }
+.chat-tab {
+  font: inherit; font-size: 14px; font-weight: 600; padding: 4px 14px; border-radius: 999px; cursor: pointer;
+  background: #f1ece2; color: var(--muted); border: 1px solid var(--line); white-space: nowrap;
+}
+.chat-tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chat-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat-form { position: relative; align-items: center; }
+.chat-form .pop-wrap { position: static; }
+.chat-icon { min-height: 40px; padding: 0 8px; font-size: 18px; line-height: 1; }
+.chat-icon.on { background: var(--accent-soft); border-color: var(--accent); }
+.chat-pop { left: 12px; right: 12px; bottom: calc(100% + 4px); min-width: 0; flex-direction: row; flex-wrap: wrap; }
+.chat-pop .btn { min-height: 32px; padding: 2px 12px; font-size: 14px; border-radius: 999px; }
+.sticker-grid .btn { font-size: 24px; padding: 0 6px; border: none; background: none; }
+.sticker-grid .btn:hover { background: #f1ece2; }
+.online-hint { font-size: 13px; color: var(--muted); padding: 8px 12px 0; }
+.online-hint:empty { display: none; }
+.online-list { flex: 1; overflow-y: auto; padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.online-row {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+  font: inherit; font-size: 15px; padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.online-row.clickable { cursor: pointer; }
+.online-row.clickable:hover { background: #faf6ee; border-color: #cbbfa8; }
+.online-row.on { background: var(--accent-soft); border-color: var(--accent); }
+.online-row .oname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.online-row .otag { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.online-row.on .otag { color: var(--accent-dark); font-weight: 700; }
+.chat-admin { border-top: 1px solid var(--line); border-bottom: none; padding: 8px 12px; }
+
 /* 寬螢幕打開聊天室時，主畫面往左讓出位置 */
 @media (min-width: 1101px) {
   body.chat-open .table, body.chat-open .home, body.chat-open .center { margin-right: 336px; }

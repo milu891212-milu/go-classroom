@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=24">
+<link rel="stylesheet" href="css/style.css?v=25">
 </head>
 <body>
 
@@ -327,12 +327,6 @@
             <button class="btn small" data-tool="w">只落白子</button>
           </div>
         </div>
-        <div class="pop-wrap" data-need="admin">
-          <button class="lec-btn" id="lecStuBtn" data-pop="popStu">學生</button>
-          <div class="pop" id="popStu" hidden>
-            <div class="stage-list" id="lecStuList"></div>
-          </div>
-        </div>
         <div class="pop-wrap" data-need="quiz">
           <button class="lec-btn" id="lecQuizBtn" data-act="quiz">一起答題</button>
         </div>
@@ -476,23 +470,38 @@
 <button class="chat-fab" id="chatFab" hidden>💬 聊天<span class="badge" id="chatBadge" hidden></span></button>
 <aside class="chat" id="chatPanel" hidden aria-label="聊天室">
   <header class="chat-head">
-    <b>聊天室</b>
-    <span class="chat-count" id="chatCount"></span>
+    <div class="chat-tabs" id="chatTabs">
+      <button class="chat-tab on" type="button" data-tab="chat" id="tabChat">聊天室</button>
+      <button class="chat-tab" type="button" data-tab="online" id="tabOnline">在線</button>
+    </div>
     <span class="spacer"></span>
     <button class="btn small" id="chatClose" aria-label="收起聊天室">收起</button>
   </header>
-  <div class="chat-people" id="chatPeople"></div>
-  <div class="chat-admin" id="chatAdmin" hidden>
-    <label><input type="checkbox" id="chatLock"> 學生禁言</label>
-    <button class="btn small" id="btnChatClear">清空聊天</button>
+  <!-- 聊天室 -->
+  <div class="chat-pane" id="paneChat">
+    <div class="chat-list" id="chatList"></div>
+    <form class="chat-form" id="chatForm" autocomplete="off">
+      <input type="text" id="chatInput" maxlength="200" placeholder="輸入訊息…" enterkeyhint="send">
+      <button class="btn primary" id="chatSend" type="submit">送出</button>
+      <div class="pop-wrap">
+        <button class="btn chat-icon" type="button" id="btnQuick" title="常用語">💬</button>
+        <div class="pop up chat-pop" id="chatQuick" hidden></div>
+      </div>
+      <div class="pop-wrap">
+        <button class="btn chat-icon" type="button" id="btnStickers" title="貼圖">😊</button>
+        <div class="pop up chat-pop sticker-grid" id="chatStickers" hidden></div>
+      </div>
+    </form>
   </div>
-  <div class="chat-list" id="chatList"></div>
-  <div class="chat-quick" id="chatQuick"></div>
-  <div class="chat-stickers" id="chatStickers"></div>
-  <form class="chat-form" id="chatForm" autocomplete="off">
-    <input type="text" id="chatInput" maxlength="200" placeholder="輸入訊息…" enterkeyhint="send">
-    <button class="btn primary" id="chatSend" type="submit">送出</button>
-  </form>
+  <!-- 在線：老師點學生可以請他擺棋 -->
+  <div class="chat-pane" id="paneOnline" hidden>
+    <div class="online-hint" id="onlineHint"></div>
+    <div class="online-list" id="chatPeople"></div>
+    <div class="chat-admin" id="chatAdmin" hidden>
+      <label><input type="checkbox" id="chatLock"> 學生禁言</label>
+      <button class="btn small" id="btnChatClear">清空聊天</button>
+    </div>
+  </div>
 </aside>
 
 <!-- 語音 -->
@@ -517,15 +526,15 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=24"></script>
-<script src="js/engine.js?v=24"></script>
-<script src="js/sgf.js?v=24"></script>
-<script src="js/game.js?v=24"></script>
-<script src="js/match.js?v=24"></script>
-<script src="js/sound.js?v=24"></script>
-<script src="js/net.js?v=24"></script>
-<script src="js/voice.js?v=24"></script>
-<script src="js/board-view.js?v=24"></script>
-<script src="js/app.js?v=24"></script>
+<script src="js/config.js?v=25"></script>
+<script src="js/engine.js?v=25"></script>
+<script src="js/sgf.js?v=25"></script>
+<script src="js/game.js?v=25"></script>
+<script src="js/match.js?v=25"></script>
+<script src="js/sound.js?v=25"></script>
+<script src="js/net.js?v=25"></script>
+<script src="js/voice.js?v=25"></script>
+<script src="js/board-view.js?v=25"></script>
+<script src="js/app.js?v=25"></script>
 </body>
 </html>
