@@ -872,6 +872,11 @@
     updateClocks();
   }
   setInterval(tick, 200);
+  // 單獨禁言的倒數：每秒更新輸入框與在線名單
+  setInterval(function () {
+    var any = Object.keys(mutes).some(function (k) { return mutes[k] > now() - 1000; });
+    if (any && online()) { renderChat(); renderPeople(); }
+  }, 1000);
 
   /* ---------- 進入各個畫面 ---------- */
   function goHome() {
@@ -1326,13 +1331,21 @@
     return rec;
   }
 
+  /* 回首頁重開房：聊天紀錄、單獨禁言一起清掉 */
+  function clearRoomChat() {
+    if (!online() || !isTeacher()) return;
+    net.clearChat().then(null, function () {});
+    net.clearMutes().then(null, function () {});
+  }
+
   function leavePlay(toHome) {
     if (state.game && state.game.lecture) {
-      ask('結束講解房？', online() ? '學生的畫面會回到「等待老師開始上課」。聊天紀錄會保留。'
+      ask('結束講解房？', online() ? '學生的畫面會回到「等待老師開始上課」。' + (toHome ? '聊天紀錄會清除。' : '聊天紀錄會保留。')
         : '棋盤上擺的變化、標記和畫線不會保留。', '結束講解').then(function (ok) {
         if (!ok || !state.game || !state.game.lecture) return;
         if (toHome) state.source = null;
         if (online()) {
+          if (toHome) clearRoomChat();
           net.setGame(null).then(null, function () { toast('連線有問題，無法結束講解房'); });
         } else if (state.source) {
           openReview(state.source, state.returnCursor);
@@ -1348,6 +1361,7 @@
         state.source = src;
         state.returnCursor = g.startAt;
         // 清掉資料庫裡的對局，雙方的畫面都會跟著離開（見 onRemoteGame）
+        if (toHome) clearRoomChat();
         net.setGame(null).then(null, function () { toast('連線有問題，無法結束對局'); });
         return;
       }
@@ -1393,6 +1407,15 @@
         firstGameEvent = true;
         stopWatching.push(net.watchChat(onChat));
         stopWatching.push(net.watchChatLock(function (on) { chat.locked = on; renderChat(); }));
+        mutes = {};
+        stopWatching.push(net.watchMutes(function (m) {
+          var was = online() && !isTeacher() ? muteLeft(session.account) : 0;
+          mutes = m;
+          var nowLeft = online() && !isTeacher() ? muteLeft(session.account) : 0;
+          if (!was && nowLeft) { Sound.notice(); toast('你被老師禁言 ' + Math.round(nowLeft / 60000) + ' 分鐘'); }
+          renderChat();
+          renderPeople();
+        }));
         hands = [];
         handsSeen = null;
         stopWatching.push(net.watchHands(onHands));
@@ -1976,7 +1999,10 @@
   }
   function speaker(m) { return nameOf(m.a, m.r); }
   function isMine(m) { return online() && m.a === session.account && m.r === session.role; }
-  function canChat() { return online() && (isTeacher() || !chat.locked); }
+  function canChat() { return online() && (isTeacher() || (!chat.locked && !muteLeft(session.account))); }
+  /* 單獨禁言還剩幾毫秒（0 = 沒有禁言） */
+  var mutes = {};
+  function muteLeft(account) { return Math.max(0, (mutes[account] || 0) - now()); }
 
   function clock(t) {
     var d = new Date(t || 0);
@@ -2007,7 +2033,6 @@
     $('onlineHint').textContent = !isTeacher() ? '' : teaching ? '點學生，選擇怎麼跟他擺棋' : '開講解房或擺棋時，點學生可以請他擺棋';
     if (!people.length) { box.textContent = '目前沒有人在線上'; return; }
     var rows = people.slice();
-    if (teaching && people.some(function (p) { return p.role === 'student'; })) rows.splice(1, 0, { account: '*', role: 'all' });
     var v = voice, inVoice = {};
     if (v) v.members.forEach(function (m) { inVoice[m.r + '|' + m.a] = true; });
     if (!isTeacher()) ctlOpen = '';
@@ -2018,12 +2043,16 @@
       row.className = 'online-row' + (on ? ' on' : '');
       var name = document.createElement('span'), tag = document.createElement('span');
       name.className = 'oname';
+      if (isTeacher() && p.role === 'student') { name.className += ' clickable'; name.setAttribute('data-who', p.account); name.title = '禁言'; }
       name.textContent = (p.role === 'student' && handUp(p.account) ? '🙋 ' : '') +
         (inVoice[p.role + '|' + p.account] ? '🎧 ' : '') +
         (p.role === 'all' ? '全部學生' : nameOf(p.account, p.role)) +
         (online() && p.account === session.account && p.role === session.role ? '（你）' : '');
       tag.className = 'otag';
-      tag.textContent = on ? MODE_NAME[pick.mode] : p.role === 'teacher' ? '老師' : p.role === 'all' ? '' : '學生';
+      var left = p.role === 'student' ? muteLeft(p.account) : 0;
+      tag.textContent = on ? MODE_NAME[pick.mode] : left ? '🔇 ' + Math.ceil(left / 1000) + '秒'
+        : p.role === 'teacher' ? '老師' : '學生';
+      tag.classList.toggle('muted', !!left && !on);
       row.appendChild(name);
       row.appendChild(tag);
       if (isTeacher() && student) {
@@ -2045,6 +2074,21 @@
         kong.disabled = !teaching;
         row.appendChild(lian);
         row.appendChild(kong);
+        if (ctlOpen === 'mute:' + p.account) {
+          var mm = document.createElement('div');
+          mm.className = 'ctl-menu';
+          var opts = [[60, '禁言 1 分鐘'], [180, '禁言 3 分鐘'], [300, '禁言 5 分鐘']];
+          if (left) opts.push([0, '解除禁言']);
+          opts.forEach(function (o) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn small';
+            b.textContent = o[1];
+            b.setAttribute('data-mute', String(o[0]));
+            mm.appendChild(b);
+          });
+          row.appendChild(mm);
+        }
         if (teaching && ctlOpen === p.account) {
           var menu = document.createElement('div');
           menu.className = 'ctl-menu';
@@ -2090,6 +2134,13 @@
     }
     chat.list.forEach(function (m) {
       var row = document.createElement('div');
+      if (m.k === 'sys') {
+        var sys = document.createElement('div');
+        sys.className = 'msg-sys';
+        sys.textContent = '［系統提示］' + m.x;
+        list.appendChild(sys);
+        return;
+      }
       row.className = 'msg ' + (m.r === 'teacher' ? 'teacher' : 'student') + ' ' + m.k + (isMine(m) ? ' mine' : '');
       var meta = document.createElement('div');
       meta.className = 'meta';
@@ -2136,7 +2187,9 @@
     $('btnQuick').disabled = !allowed;
     $('btnStickers').disabled = !allowed;
     if (!allowed) chat.pop = '';
-    $('chatInput').placeholder = allowed ? '輸入訊息…' : '老師開啟了禁言，現在不能發言';
+    var myMute = online() && !isTeacher() ? muteLeft(session.account) : 0;
+    $('chatInput').placeholder = allowed ? '輸入訊息…'
+      : myMute ? '你被禁言了，還有 ' + Math.ceil(myMute / 1000) + ' 秒' : '老師開啟了禁言，現在不能發言';
     var role = isTeacher() ? 'teacher' : 'student';
     if ($('chatQuick').getAttribute('data-role') !== role) {
       $('chatQuick').setAttribute('data-role', role);
@@ -2183,7 +2236,8 @@
       Sound.notice();
       if (!chat.open && !docked()) {
         chat.unread++;
-        if (m.k !== 'sticker') toast(speaker(m) + '：' + m.x);
+        if (m.k === 'sys') toast(m.x);
+        else if (m.k !== 'sticker') toast(speaker(m) + '：' + m.x);
       } else if (chat.tab !== 'chat') {
         chat.tabUnread++;
       }
@@ -2194,7 +2248,11 @@
 
   var CHAT_GAP = 5000;   // 學生每則留言至少間隔 5 秒，避免刷頻
   function sendChat(kind, text) {
-    if (!canChat()) { toast('老師開啟了禁言，現在不能發言'); return false; }
+    if (!canChat()) {
+      var ml = muteLeft(session.account);
+      toast(ml ? '你被禁言了，還有 ' + Math.ceil(ml / 1000) + ' 秒' : '老師開啟了禁言，現在不能發言');
+      return false;
+    }
     if (!isTeacher()) {
       var wait = CHAT_GAP - (Date.now() - (chat.lastSent || 0));
       if (wait > 0) { toast('請等 ' + Math.ceil(wait / 1000) + ' 秒再留言'); return false; }
@@ -2279,6 +2337,21 @@
       (a === '*' ? net.setVoiceAllowAll(on) : net.setVoiceAllow(a, on)).then(function () {
         toast((a === '*' ? '全部學生' : nick(a)) + (on ? '：可以說話' : '：關閉麥克風'));
       }, function () { toast('連線有問題，沒有設定成功'); });
+      return;
+    }
+    if ((b = ev.target.closest('[data-mute]'))) {
+      var acc = ctlOpen.slice(5), sec = parseInt(b.getAttribute('data-mute'), 10);
+      ctlOpen = '';
+      net.setMute(acc, sec ? now() + sec * 1000 : 0).then(function () {
+        net.sendChat({ k: 'sys', x: sec ? nick(acc) + ' 被禁言 ' + (sec / 60) + ' 分鐘' : '已解除 ' + nick(acc) + ' 的禁言' });
+      }, function () { toast('連線有問題，沒有設定成功'); });
+      renderPeople();
+      return;
+    }
+    if ((b = ev.target.closest('[data-who]'))) {
+      var w = 'mute:' + b.getAttribute('data-who');
+      ctlOpen = ctlOpen === w ? '' : w;
+      renderPeople();
       return;
     }
     if ((b = ev.target.closest('[data-ctl]'))) {

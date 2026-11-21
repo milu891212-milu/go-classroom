@@ -17,6 +17,8 @@
  *   clearChat()               清空聊天室（老師）
  *   watchChatLock(cb)         cb(學生是否被禁止發言)
  *   setChatLock(on)           老師開關「學生禁言」
+ *   setMute(account, until)   單獨禁言某位學生到 until（毫秒）；until = 0 解除
+ *   clearMutes()／watchMutes(cb)  cb({ 帳號: 禁言到幾點 })
  *   setHand(on)               學生舉手／放下
  *   lowerHand(account)        老師幫某個學生放下手（請上台後）
  *   watchHands(cb)            cb([{ a: 帳號, t: 舉手時間 }])，先舉手的排前面
@@ -51,6 +53,7 @@
   var DEMO_PRESENCE = 'go-classroom-demo-presence-';
   var DEMO_CHAT = 'go-classroom-demo-chat';
   var DEMO_LOCK = 'go-classroom-demo-chatlock';
+  var DEMO_MUTES = 'go-classroom-demo-mutes';
   var DEMO_HANDS = 'go-classroom-demo-hands';
   var DEMO_VMEMBER = 'go-classroom-demo-vmember-';   // + pid
   var DEMO_VMSG = 'go-classroom-demo-vmsg-';         // + 收件人 pid + '-' + 亂數
@@ -58,6 +61,15 @@
 
   /* 帳號當成資料庫的鍵時，不能有 . # $ [ ] / 這些字元 */
   function safeKey(account) { return String(account).replace(/[.#$\[\]\/]/g, '_') || '_'; }
+  /* 單獨禁言：{ 帳號: 禁言到幾點（毫秒） } */
+  function muteList(obj) {
+    var out = {};
+    Object.keys(obj || {}).forEach(function (k) {
+      var v = obj[k];
+      if (v && v.a && v.u) out[v.a] = v.u;
+    });
+    return out;
+  }
   function sortHands(obj) {
     return Object.keys(obj || {}).map(function (k) { return obj[k]; })
       .filter(function (h) { return h && h.a; })
@@ -68,7 +80,7 @@
 
   /* 整理要送出的訊息 */
   function chatMessage(user, msg, t) {
-    var k = msg && (msg.k === 'quick' || msg.k === 'sticker') ? msg.k : 'text';
+    var k = msg && (msg.k === 'quick' || msg.k === 'sticker' || msg.k === 'sys') ? msg.k : 'text';
     var x = String((msg && msg.x) || '').trim().slice(0, CHAT_MAX_LEN);
     if (!x) return null;
     return { a: user.account, r: user.role, k: k, x: x, t: t };
@@ -84,6 +96,7 @@
     this.presenceCb = null;
     this.chatCb = null;
     this.lockCb = null;
+    this.mutesCb = null;
     this.handsCb = null;
     this.vMembersCb = null;
     this.vInbox = null;      // { pid, cb }
@@ -95,6 +108,7 @@
       if (ev.key === DEMO_GAME) self._emitGame();
       else if (ev.key === DEMO_CHAT) self._emitChat();
       else if (ev.key === DEMO_LOCK) self._emitLock();
+      else if (ev.key === DEMO_MUTES) self._emitMutes();
       else if (ev.key === DEMO_HANDS) self._emitHands();
       else if (ev.key === DEMO_VALLOW) self._emitAllow();
       else if (ev.key && ev.key.indexOf(DEMO_VMEMBER) === 0) self._emitMembers();
@@ -336,6 +350,28 @@
     this._emitLock();
     return Promise.resolve();
   };
+  LocalBackend.prototype._mutes = function () {
+    try { return JSON.parse(localStorage.getItem(DEMO_MUTES) || '{}'); } catch (e) { return {}; }
+  };
+  LocalBackend.prototype._emitMutes = function () { if (this.mutesCb) this.mutesCb(muteList(this._mutes())); };
+  LocalBackend.prototype.setMute = function (account, until) {
+    var m = this._mutes();
+    if (until) m[safeKey(account)] = { a: account, u: until }; else delete m[safeKey(account)];
+    localStorage.setItem(DEMO_MUTES, JSON.stringify(m));
+    this._emitMutes();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.clearMutes = function () {
+    localStorage.removeItem(DEMO_MUTES);
+    this._emitMutes();
+    return Promise.resolve();
+  };
+  LocalBackend.prototype.watchMutes = function (cb) {
+    var self = this;
+    this.mutesCb = cb;
+    setTimeout(function () { self._emitMutes(); }, 0);
+    return function () { self.mutesCb = null; };
+  };
 
   /* ================= Firebase ================= */
 
@@ -562,6 +598,16 @@
 
   FirebaseBackend.prototype.setChatLock = function (on) {
     return this.room.child('chatLock').set(on ? true : null);
+  };
+
+  FirebaseBackend.prototype.setMute = function (account, until) {
+    return this.room.child('mutes/' + safeKey(account)).set(until ? { a: account, u: until } : null);
+  };
+  FirebaseBackend.prototype.clearMutes = function () { return this.room.child('mutes').remove(); };
+  FirebaseBackend.prototype.watchMutes = function (cb) {
+    var ref = this.room.child('mutes');
+    var handler = ref.on('value', function (s) { cb(muteList(s.val())); }, noop);
+    return function () { ref.off('value', handler); };
   };
 
   FirebaseBackend.prototype.setHand = function (on) {
