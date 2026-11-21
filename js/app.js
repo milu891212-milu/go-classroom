@@ -405,7 +405,9 @@
         var quizKey = g.quiz ? g.quiz.n + ':' + g.quiz.state : '';
         if (quizKey !== prev.quiz && g.quiz && online()) {
           Sound.notice();
-          if (g.quiz.state === 'open' && !isTeacher()) toast('老師出題：點棋盤選下一手');
+          if (g.quiz.state === 'open' && !isTeacher()) {
+            toast(g.quiz.multi ? '老師出題：多手答題，擺出你的變化後按「提交」' : '老師出題：一手答題，點棋盤下一手');
+          }
         } else if (prev.who && (g.demo.who !== prev.who || g.demo.stage !== prev.stage) && online()) {
           Sound.notice();
           toast(whoText(g, true));
@@ -1857,11 +1859,11 @@
     if (q && q.multi) { renderMulti(g, q, teacher, students); return; }
     var title = '', text = '';
     if (q && teacher) {
-      title = '答題中';
+      title = '一手答題';
       text = '已答 ' + answered.length + (students.length ? ' / ' + students.length : '') + ' 人';
     } else if (q) {
       var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
-      title = '老師出題';
+      title = '老師出題：一手答題';
       text = mine ? '你下在 ' + E.label(size, mine.p) + '（可以改）' : '輪到' + G.colorName(q.c) + '，點棋盤下一手';
     }
     $('quizTitle').textContent = title;
