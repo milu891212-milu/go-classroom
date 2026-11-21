@@ -435,8 +435,51 @@
   }
 
   /* ---------- 畫面更新 ---------- */
+  /*
+   * 講解房版面：左邊老師的操作、中間棋盤（上一手／下一手在棋盤下方）、右邊語音＋聊天室。
+   * 寬螢幕才把語音與聊天室固定在右邊（docked）；窄螢幕維持原本的浮動按鈕。
+   */
+  var wideScreen = window.matchMedia ? window.matchMedia('(min-width: 1101px)') : { matches: true };
+  var navSlot = document.createComment('teachNav');
+  $('teachNav').parentNode.insertBefore(navSlot, $('teachNav'));
+  var chatSlot = document.createComment('chat'), voiceSlot = document.createComment('voice');
+  $('chatPanel').parentNode.insertBefore(chatSlot, $('chatPanel'));
+  $('voicePanel').parentNode.insertBefore(voiceSlot, $('voicePanel'));
+
+  function inLectureView() { return state.mode === 'play' && !!state.game && !!state.game.lecture; }
+  function docked() { return document.body.classList.contains('dock'); }
+  function moveTo(el, parent) { if (el.parentNode !== parent) parent.appendChild(el); }
+  function moveBack(el, slot) { if (el.previousSibling !== slot) slot.parentNode.insertBefore(el, slot.nextSibling); }
+
+  function applyLayout() {
+    var lec = inLectureView(), dock = lec && online() && wideScreen.matches;
+    document.body.classList.toggle('lecture-layout', lec);
+    document.body.classList.toggle('dock', dock);
+    if (lec) {
+      moveTo($('teachNav'), $('boardBar'));
+      moveTo($('teachWhere'), $('boardBar'));
+    } else {
+      moveBack($('teachNav'), navSlot);
+      moveBack($('teachWhere'), $('teachNav'));
+    }
+    $('sideRight').hidden = !dock;
+    if (dock) {
+      moveTo($('voicePanel'), $('sideRight'));
+      moveTo($('chatPanel'), $('sideRight'));
+    } else {
+      moveBack($('voicePanel'), voiceSlot);
+      moveBack($('chatPanel'), chatSlot);
+    }
+  }
+  if (wideScreen.addEventListener) wideScreen.addEventListener('change', function () { render(); });
+  // 有些瀏覽器不會送出上面的事件：視窗大小改變時再檢查一次
+  window.addEventListener('resize', function () {
+    if (inLectureView() && (online() && wideScreen.matches) !== docked()) render();
+  });
+
   function render() {
     var m = state.mode, table = m === 'review' || m === 'play';
+    applyLayout();
     $('login').hidden = m !== 'login';
     $('home').hidden = m !== 'home';
     $('wait').hidden = m !== 'wait';
@@ -461,6 +504,7 @@
     renderChat();
     if (!table) { $('modeTag').textContent = ''; return; }
     if (m === 'play') renderPlay(); else renderReview();
+    $('boardBar').hidden = !inLectureView() || $('teachBox').hidden || $('teachNav').hidden;
     updateClocks();
   }
 
@@ -1615,7 +1659,9 @@
   function renderVoice() {
     var show = online() && state.mode !== 'login' && !!voice;
     $('btnVoice').hidden = !show;
-    $('voicePanel').hidden = !show || !voiceOpen;
+    $('btnVoice').hidden = !show || docked();
+    $('voicePanel').hidden = !show || !(voiceOpen || docked());
+    $('voiceClose').hidden = docked();
     if (!show) return;
     var v = voice, teacher = isTeacher(), members = v.members.slice();
     members.sort(function (a, b) {
@@ -1804,9 +1850,12 @@
     renderHand();
     renderVoice();
     var show = online() && state.mode !== 'login';
-    $('chatFab').hidden = !show || chat.open;
-    $('chatPanel').hidden = !show || !chat.open;
-    document.body.classList.toggle('chat-open', show && chat.open);
+    var open = chat.open || docked();
+    if (docked()) chat.unread = 0;
+    $('chatFab').hidden = !show || open;
+    $('chatPanel').hidden = !show || !open;
+    $('chatClose').hidden = docked();
+    document.body.classList.toggle('chat-open', show && open && !docked());
     $('chatBadge').hidden = !chat.unread;
     $('chatBadge').textContent = chat.unread > 99 ? '99+' : String(chat.unread);
     if (!show) return;
@@ -1861,7 +1910,7 @@
       if (m.k === 'sticker') popSticker(m.x, isMine(m) ? '我' : speaker(m));
       if (isMine(m)) return;
       Sound.notice();
-      if (!chat.open) {
+      if (!chat.open && !docked()) {
         chat.unread++;
         if (m.k !== 'sticker') toast(speaker(m) + '：' + m.x);
       }

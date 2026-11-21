@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=19">
+<link rel="stylesheet" href="css/style.css?v=20">
 </head>
 <body>
 
@@ -150,7 +150,12 @@
 <main class="table" id="table" hidden>
   <section class="board-wrap">
     <svg id="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="棋盤"></svg>
+    <!-- 講解房：上一手／下一手放在棋盤下方 -->
+    <div class="board-bar" id="boardBar" hidden></div>
   </section>
+
+  <!-- 講解房（寬螢幕）：右側固定放語音與聊天室 -->
+  <aside class="side-right" id="sideRight" hidden></aside>
 
   <aside class="panel">
     <div class="players">
@@ -436,22 +441,22 @@
     <label class="voice-all" id="voiceAllRow" hidden><input type="checkbox" id="voiceAllowAll"> 全部學生都可以說話</label>
     <div class="voice-list" id="voiceList"></div>
     <button class="btn wide" id="btnVoiceLeave" hidden>離開語音</button>
-    <p class="hint">建議戴耳機，避免回音。按「收起」只是收起這個面板，語音會繼續。</p>
+    <p class="hint">建議戴耳機，避免回音。</p>
   </div>
 </aside>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=19"></script>
-<script src="js/engine.js?v=19"></script>
-<script src="js/sgf.js?v=19"></script>
-<script src="js/game.js?v=19"></script>
-<script src="js/match.js?v=19"></script>
-<script src="js/sound.js?v=19"></script>
-<script src="js/net.js?v=19"></script>
-<script src="js/voice.js?v=19"></script>
-<script src="js/board-view.js?v=19"></script>
-<script src="js/app.js?v=19"></script>
+<script src="js/config.js?v=20"></script>
+<script src="js/engine.js?v=20"></script>
+<script src="js/sgf.js?v=20"></script>
+<script src="js/game.js?v=20"></script>
+<script src="js/match.js?v=20"></script>
+<script src="js/sound.js?v=20"></script>
+<script src="js/net.js?v=20"></script>
+<script src="js/voice.js?v=20"></script>
+<script src="js/board-view.js?v=20"></script>
+<script src="js/app.js?v=20"></script>
 </body>
 </html>

@@ -376,6 +376,42 @@ dialog .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-to
   .voice { left: 8px; right: 8px; width: auto; }
 }
 
+/* ---------- 講解房版面 ---------- */
+body.lecture-layout .players { display: none; }
+body.lecture-layout #board { max-width: calc(100dvh - var(--topbar) - 100px); }
+.board-bar {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; max-width: calc(100dvh - var(--topbar) - 100px); margin: 10px auto 0;
+  padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.board-bar .nav { flex: 1; }
+.board-bar .teach-title { white-space: nowrap; font-size: 14px; color: var(--ink); min-width: 5em; text-align: center; }
+/* 左側操作區：場地資訊、工具、學生列表依序往下排 */
+body.lecture-layout #playBox #lectureBox { order: -2; }
+body.lecture-layout #playBox #teachBox { order: -1; }
+
+@media (min-width: 1101px) {
+  body.dock .table {
+    grid-template-columns: 300px minmax(0, 1fr) 330px;
+    gap: 16px; padding: 12px 16px;
+  }
+  body.dock .table > .panel { grid-column: 1; grid-row: 1; }
+  body.dock .table > .board-wrap { grid-column: 2; grid-row: 1; }
+  body.dock .table > .side-right { grid-column: 3; grid-row: 1; }
+  body.dock .table > .panel, body.dock .side-right {
+    position: sticky; top: 12px;
+    max-height: calc(100dvh - var(--topbar) - 24px);
+  }
+  body.dock .table > .panel { overflow-y: auto; padding-right: 2px; }
+  body.dock .side-right { display: flex; flex-direction: column; gap: 12px; height: calc(100dvh - var(--topbar) - 24px); }
+  body.dock .side-right .chat, body.dock .side-right .voice {
+    position: static; width: auto; box-shadow: none; inset: auto;
+  }
+  body.dock .side-right .voice { flex: none; max-height: 45%; }
+  body.dock .side-right .chat { flex: 1; min-height: 0; height: auto; }
+  body.dock .hand-fab { right: auto; left: 16px; bottom: 16px; }
+}
+
 /* 寬螢幕打開聊天室時，主畫面往左讓出位置 */
 @media (min-width: 1101px) {
   body.chat-open .table, body.chat-open .home, body.chat-open .center { margin-right: 336px; }
