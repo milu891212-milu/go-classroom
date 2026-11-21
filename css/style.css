@@ -674,3 +674,13 @@ body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
 .bar-icon .ico .fill { fill: currentColor; }
 .bar-icon { gap: 6px; color: #4a3f33; }
 .bar-icon small { font-size: 13px; }
+
+/* 全站的線條圖示 */
+.ico { width: 1.15em; height: 1.15em; vertical-align: -0.2em; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ico .fill { fill: currentColor; stroke: none; }
+.btn .ico, .chat-fab .ico, .hand-fab .ico { margin-right: 6px; }
+.chat-icon .ico { margin: 0; width: 20px; height: 20px; vertical-align: middle; }
+.oname .ico { width: 15px; height: 15px; margin-right: 4px; vertical-align: -2px; color: var(--accent-dark); }
+.stage-list .ico { width: 15px; height: 15px; vertical-align: -2px; }
+.voice-row .vname .ico { width: 15px; height: 15px; margin-right: 4px; vertical-align: -2px; }
+.hand-fab, .chat-fab { display: inline-flex; align-items: center; }

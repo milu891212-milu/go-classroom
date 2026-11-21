@@ -34,6 +34,26 @@
     return role === 'teacher' ? (NICK[String(account || '').toLowerCase()] || '老師') : nick(account);
   }
 
+  /* 線條圖示（取代表情符號），用法：icon('mic') 回傳 SVG 字串 */
+  var ICONS = {
+    chat: '<path d="M5 4.5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-8l-4.5 3.5V17H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/>',
+    quick: '<path d="M5 4.5h14a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2h-8l-4.5 3.5V17H5a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/><path d="M7.5 9h9M7.5 12.5h5.5"/>',
+    smile: '<circle cx="12" cy="12" r="8.5"/><path d="M8.3 14a4.6 4.6 0 0 0 7.4 0"/><circle cx="9.2" cy="9.8" r=".9" class="fill"/><circle cx="14.8" cy="9.8" r=".9" class="fill"/>',
+    hand: '<path d="M8 12.5V6a1.5 1.5 0 0 1 3 0v5.5"/><path d="M11 11V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-.5a5.4 5.4 0 0 1-4.5-2.4l-2.3-3.5a1.4 1.4 0 0 1 2.2-1.7L8 14.5"/>',
+    headset: '<path d="M4.5 15v-3a7.5 7.5 0 0 1 15 0v3"/><path d="M4.5 14.5h2.5a1 1 0 0 1 1 1v3.5a1 1 0 0 1-1 1H5.5a1 1 0 0 1-1-1z"/><path d="M19.5 14.5H17a1 1 0 0 0-1 1v3.5a1 1 0 0 0 1 1h1.5a1 1 0 0 0 1-1z"/>',
+    mic: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6"/>',
+    micoff: '<rect x="9" y="3.5" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6"/><path d="M4 4l16 16"/>',
+    pen: '<path d="M15.6 4.4a2 2 0 0 1 2.9 0l1.1 1.1a2 2 0 0 1 0 2.9L9 19l-4.6 1.1L5.5 15.5z"/><path d="M13.8 6.2l4 4"/>'
+  };
+  function icon(name) {
+    return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
+  }
+  /* 把圖示＋文字放進元素（文字用 textContent，不會被當成 HTML） */
+  function setIconText(el, name, text) {
+    el.innerHTML = name ? icon(name) : '';
+    el.appendChild(document.createTextNode(text));
+  }
+
   function online() { return !!session; }
   function isTeacher() { return online() && session.role === 'teacher'; }
   function now() { return online() ? net.now() : Date.now(); }
@@ -1582,7 +1602,7 @@
       now[k] = true;
       if (!first && !handsSeen[k] && isTeacher()) {
         Sound.notice();
-        toast('🙋 ' + nick(h.a) + ' 舉手了');
+        toast(nick(h.a) + ' 舉手了');
       }
     });
     handsSeen = now;
@@ -1596,7 +1616,7 @@
     var up = show && handUp(session.account);
     $('handFab').hidden = !show;
     $('handFab').classList.toggle('up', up);
-    $('handFab').textContent = up ? '🙋 放下手' : '🙋 舉手';
+    setIconText($('handFab'), 'hand', up ? '放下手' : '舉手');
   }
 
   /*
@@ -1634,7 +1654,7 @@
       var b = document.createElement('button'), on = a === pick.who;
       b.type = 'button';
       b.className = 'btn' + (on ? ' on' : handUp(a) ? ' raised' : '');
-      b.textContent = (handUp(a) ? '🙋 ' : '') + (a === '*' ? '全部學生' : nick(a)) + (on ? '（' + MODE_NAME[pick.mode] + '）' : '');
+      setIconText(b, handUp(a) ? 'hand' : '', (a === '*' ? '全部學生' : nick(a)) + (on ? '（' + MODE_NAME[pick.mode] + '）' : ''));
       b.setAttribute('data-stage', a);
       box.appendChild(b);
     });
@@ -1661,11 +1681,19 @@
   }
 
   /*
-   * 講解房／擺棋的手數：「顯示手數」打開時，棋譜原有的棋子照棋譜手數，擺上去的變化接著往下數
-   * （例如棋譜停在第 50 手，試下的第一手是 51）；關掉時都不顯示，只標最後一手。
+   * 講解房／擺棋的手數：「顯示手數」打開時，棋譜原有的棋子照棋譜手數、擺上去的棋接著往下數；
+   * 試下中只顯示試下的棋，從 1 開始。關掉時都不顯示，只標最後一手。
    */
   function demoNumbers(g, dv) {
     if (!prefs.demoNumbers) return null;
+    var d = g.demo, i;
+    if (d.trial) {
+      // 試下中：只顯示試下的棋，從 1 開始數（棋譜與試下前擺的棋不標手數，避免數字混在一起）
+      var pre = d.moves.slice(0, d.trial.at).filter(function (m) { return !m.s; }).length;
+      var t = new Array(dv.board.length);
+      for (i = 0; i < t.length; i++) t[i] = dv.numbers[i] > pre ? dv.numbers[i] - pre : 0;
+      return t;
+    }
     var rec = G.replay(g.record, dv.base).numbers, baseNo = G.countMoves(g.record, dv.base);
     var out = new Array(dv.board.length);
     for (var i = 0; i < out.length; i++) {
@@ -1681,7 +1709,9 @@
     if (!q || isTeacher() || !online() || q.size !== g.record.size) return out;
     var mine = q.answers.filter(function (x) { return x.a === session.account; })[0];
     if (!mine || dv.board[mine.p]) return out;
-    var next = G.countMoves(g.record, dv.base) + g.demo.moves.filter(function (m) { return !m.s; }).length + 1;
+    var dm = g.demo, played = function (list) { return list.filter(function (m) { return !m.s; }).length; };
+    var next = dm.trial ? played(dm.moves.slice(dm.trial.at)) + 1   // 試下中：接著試下的手數（從 1 開始）
+      : G.countMoves(g.record, dv.base) + played(dm.moves) + 1;
     out.board = Array.prototype.slice.call(dv.board);
     out.board[mine.p] = q.c;
     if (numbers) {
@@ -2001,26 +2031,26 @@
     var can = v.canSpeak();
     if (!teacher && v.joined && voiceSeen.canSpeak !== null && can !== voiceSeen.canSpeak) {
       Sound.notice();
-      toast(can ? '老師開放你說話了 🎤' : '老師關閉了你的麥克風');
+      toast(can ? '老師開放你說話了' : '老師關閉了你的麥克風');
     }
     voiceSeen.canSpeak = v.joined ? can : null;
     if (!teacher && !v.joined && teacherIn && voiceSeen.teacherIn === false) {
       Sound.notice();
-      toast('老師開了語音，按上方「🎧 語音」加入');
+      toast('老師開了語音，按「加入語音」就能聽到');
     }
     voiceSeen.teacherIn = teacherIn;
 
     var btn = $('btnVoice');
     btn.classList.toggle('on', v.joined);
-    btn.textContent = v.joined ? (v.speaking() ? '🎙️ 語音中' : '🎧 語音中')
-      : '🎧 語音' + (members.length ? '（' + members.length + '）' : '');
+    setIconText(btn, v.joined && v.speaking() ? 'mic' : 'headset', v.joined ? '語音中'
+      : '語音' + (members.length ? '（' + members.length + '）' : ''));
     $('voiceState').textContent = v.joining ? '加入中…' : v.joined ? '已加入' : '尚未加入';
     $('btnVoiceJoin').hidden = v.joined;
     $('btnVoiceJoin').disabled = v.joining;
-    $('btnVoiceJoin').textContent = v.joining ? '加入中…' : '加入語音';
+    setIconText($('btnVoiceJoin'), 'headset', v.joining ? '加入中…' : '加入語音');
     $('btnVoiceLeave').hidden = !v.joined;
     $('btnMic').hidden = !v.joined || !v.stream;
-    $('btnMic').textContent = v.micOn ? '🎤 我的麥克風：開（按一下關掉）' : '🔇 我的麥克風：關（按一下打開）';
+    setIconText($('btnMic'), v.micOn ? 'mic' : 'micoff', v.micOn ? '我的麥克風：開' : '我的麥克風：關');
     $('btnMic').classList.toggle('on', v.micOn && can);
 
     // 精簡版：沒加入只有「加入語音」；加入後是「語音中／收聽中」＋麥克風＋離開
@@ -2031,7 +2061,8 @@
     hint.title = v.micError || '';
     hint.classList.toggle('warn', warn);
     $('btnMic').hidden = !v.joined || !v.stream || !(teacher || can);
-    $('btnMic').textContent = v.micOn ? '🎤 開' : '🔇 關';
+    setIconText($('btnMic'), v.micOn ? 'mic' : 'micoff', v.micOn ? '開' : '關');
+    $('btnMic').title = v.micOn ? '按一下關掉麥克風' : '按一下打開麥克風';
     $('btnVoiceJoin').hidden = v.joined;
     $('btnVoiceLeave').hidden = !v.joined;
     if (v.micError && voiceSeen.err !== v.micError) toast(v.micError);
@@ -2055,7 +2086,7 @@
       row.className = 'voice-row';
       var talking = m.has && m.mic && v.allowed(m.a, m.r);
       name.className = 'vname';
-      name.textContent = (talking ? '🎤 ' : '🔇 ') + voiceName(m);
+      setIconText(name, talking ? 'mic' : 'micoff', voiceName(m));
       st.className = 'vstate';
       if (m.pid === v.pid) {
         st.textContent = m.has ? '' : '沒有麥克風';
@@ -2171,13 +2202,15 @@
       var name = document.createElement('span'), tag = document.createElement('span');
       name.className = 'oname';
       if (isTeacher() && p.role === 'student') { name.className += ' clickable'; name.setAttribute('data-who', p.account); name.title = '禁言'; }
-      name.textContent = (p.role === 'student' && handUp(p.account) ? '🙋 ' : '') +
-        (inVoice[p.role + '|' + p.account] ? '🎧 ' : '') +
+      // 圖示：舉手、在語音裡（文字另外放，避免被當成 HTML）
+      name.innerHTML = (p.role === 'student' && handUp(p.account) ? icon('hand') : '') +
+        (inVoice[p.role + '|' + p.account] ? icon('headset') : '');
+      name.appendChild(document.createTextNode(
         (p.role === 'all' ? '全部學生' : nameOf(p.account, p.role)) +
-        (online() && p.account === session.account && p.role === session.role ? '（你）' : '');
+        (online() && p.account === session.account && p.role === session.role ? '（你）' : '')));
       tag.className = 'otag';
       var left = p.role === 'student' ? muteLeft(p.account) : 0;
-      tag.textContent = on ? MODE_NAME[pick.mode] : left ? '🔇 ' + Math.ceil(left / 1000) + '秒'
+      tag.textContent = on ? MODE_NAME[pick.mode] : left ? '禁言 ' + Math.ceil(left / 1000) + '秒'
         : p.role === 'teacher' ? '老師' : '學生';
       tag.classList.toggle('muted', !!left && !on);
       row.appendChild(name);
