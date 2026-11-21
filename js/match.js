@@ -663,6 +663,13 @@
     return true;
   }
 
+  /* 清除所有標記 */
+  function demoUnmark(game) {
+    if (game.status !== 'demo' || !game.demo.marks.length) return false;
+    game.demo.marks = [];
+    return true;
+  }
+
   /* 結束試下：剛才擺的變化與標記全部拿掉，回到開始擺變化之前的那個局面（對局的著手停在原處） */
   function demoClear(game) {
     if (game.status !== 'demo') return false;
@@ -838,6 +845,7 @@
     lectureLoad: lectureLoad,
     demoDraw: demoDraw,
     demoTrial: demoTrial,
+    demoUnmark: demoUnmark,
     demoUndraw: demoUndraw,
     demoView: demoView,
     demoNextColor: demoNextColor,

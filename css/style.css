@@ -510,3 +510,23 @@ body.lecture-layout .table { padding-top: 8px; padding-bottom: 8px; }
   .board-bar { flex-wrap: wrap; justify-content: center; }
   .bar-icon small { display: none; }
 }
+
+/* 棋盤下方工具列：按鈕平均分布，不留一大塊空白 */
+.board-bar { justify-content: space-between; }
+.board-bar > .bar-nav, .board-bar > .bar-tools { display: contents; }
+.board-bar > [hidden] { display: none !important; }
+.bar-nav .btn, .bar-icon { flex: 1 1 0; justify-content: center; min-width: 0; }
+.bar-count { flex: 1.4 1 0; }
+.bar-mode { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 30px; }
+.bar-mode .btn { min-height: 30px; padding: 0 12px; font-size: 14px; white-space: nowrap; }
+.bar-label { font-weight: 700; white-space: nowrap; font-size: 14px; }
+.bar-gap { flex: 1; }
+.bar-mode .swatches { display: flex; gap: 10px; }
+.bar-mode .swatch { width: 26px; height: 26px; }
+.mark-choices { display: flex; gap: 6px; }
+.mark-choices .btn { min-width: 40px; padding: 0 8px; }
+.mark-choices .btn.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (max-width: 700px) {
+  .bar-mode { flex-wrap: wrap; justify-content: center; }
+  .bar-gap { display: none; }
+}

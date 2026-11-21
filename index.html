@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>圍棋對弈教室</title>
-<link rel="stylesheet" href="css/style.css?v=23">
+<link rel="stylesheet" href="css/style.css?v=24">
 </head>
 <body>
 
@@ -163,23 +163,30 @@
       </div>
       <div class="bar-tools" id="barTools">
         <button class="bar-icon" id="barTrial" title="試下：擺完按這裡結束，就回到原來的盤面">✋<small>試下</small></button>
-        <div class="pop-wrap">
-          <button class="bar-icon" id="barPen" title="畫筆">🖌️<small>畫筆</small></button>
-          <div class="pop up" id="popPen" hidden>
-            <div class="swatches" id="penColors"></div>
-            <button class="btn small" id="barClearDraw">清除全部</button>
-          </div>
+        <button class="bar-icon" id="barPen" title="畫筆">🖌️<small>畫筆</small></button>
+        <button class="bar-icon" id="barMark" title="標記">⑧<small>標記</small></button>
+      </div>
+      <!-- 畫筆模式：整排換成顏色；按「退出」回到上面那排，並清空畫線 -->
+      <div class="bar-mode" id="barPenRow" hidden>
+        <span class="bar-label">畫筆顏色：</span>
+        <div class="swatches" id="penColors"></div>
+        <span class="bar-gap"></span>
+        <button class="btn" id="barClearDraw">清空畫板</button>
+        <button class="btn" id="barPenExit">退出</button>
+      </div>
+      <!-- 標記模式：整排換成標記；按「退出」回到上面那排，並清除標記 -->
+      <div class="bar-mode" id="barMarkRow" hidden>
+        <span class="bar-label">標記：</span>
+        <div class="mark-choices" id="markChoices">
+          <button class="btn" data-tool="tri">△</button>
+          <button class="btn" data-tool="sq">□</button>
+          <button class="btn" data-tool="cir">○</button>
+          <button class="btn" data-tool="x">✕</button>
+          <button class="btn" data-tool="letter">ABC</button>
         </div>
-        <div class="pop-wrap">
-          <button class="bar-icon" id="barMark" title="標記">⑧<small>標記</small></button>
-          <div class="pop up row-pop" id="popMark" hidden>
-            <button class="btn small" data-tool="tri">△</button>
-            <button class="btn small" data-tool="sq">□</button>
-            <button class="btn small" data-tool="cir">○</button>
-            <button class="btn small" data-tool="x">✕</button>
-            <button class="btn small" data-tool="letter">ABC</button>
-          </div>
-        </div>
+        <span class="bar-gap"></span>
+        <button class="btn" id="barClearMarks">清除標記</button>
+        <button class="btn" id="barMarkExit">退出</button>
       </div>
     </div>
   </section>
@@ -510,15 +517,15 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <!-- 每次更新程式就把 v= 後面的數字加一，瀏覽器才會抓新版而不是用舊的暫存 -->
-<script src="js/config.js?v=23"></script>
-<script src="js/engine.js?v=23"></script>
-<script src="js/sgf.js?v=23"></script>
-<script src="js/game.js?v=23"></script>
-<script src="js/match.js?v=23"></script>
-<script src="js/sound.js?v=23"></script>
-<script src="js/net.js?v=23"></script>
-<script src="js/voice.js?v=23"></script>
-<script src="js/board-view.js?v=23"></script>
-<script src="js/app.js?v=23"></script>
+<script src="js/config.js?v=24"></script>
+<script src="js/engine.js?v=24"></script>
+<script src="js/sgf.js?v=24"></script>
+<script src="js/game.js?v=24"></script>
+<script src="js/match.js?v=24"></script>
+<script src="js/sound.js?v=24"></script>
+<script src="js/net.js?v=24"></script>
+<script src="js/voice.js?v=24"></script>
+<script src="js/board-view.js?v=24"></script>
+<script src="js/app.js?v=24"></script>
 </body>
 </html>

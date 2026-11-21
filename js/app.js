@@ -1652,8 +1652,17 @@
   });
   view.penColor = state.penColor;
 
+  /* 工具列的模式：'' 一般（上一手／下一手）、'pen' 畫筆、'mark' 標記 */
+  var barMode = '';
+  var MARK_TOOLS = { tri: true, sq: true, cir: true, x: true, letter: true };
+
   function renderBar(g, dv, rights) {
     var d = g.demo, tool = demoTool(g), total = G.countMoves(g.record);
+    if (!rights.marks && barMode) { barMode = ''; if (DRAW_TOOL[state.tool] || MARK_TOOLS[state.tool]) state.tool = 'alt'; }
+    $('barNav').hidden = !!barMode;
+    $('barTools').hidden = !!barMode;
+    $('barPenRow').hidden = barMode !== 'pen';
+    $('barMarkRow').hidden = barMode !== 'mark';
     var text;
     if (d.trial) text = '試下 ' + (d.moves.length - d.trial.at) + ' 手';
     else if (!g.record.moves.length) text = d.moves.length + '手';
@@ -1663,21 +1672,16 @@
     $('barTrial').hidden = !rights.stones && !rights.nav;
     $('barTrial').classList.toggle('on', !!d.trial);
     $('barTrial').title = d.trial ? '結束試下，回到原來的盤面' : '試下：擺完按這裡結束，就回到原來的盤面';
-    var isMark = STONE_TOOL[tool] === undefined && !DRAW_TOOL[tool];
-    $('barPen').parentNode.hidden = !rights.marks;
-    $('barMark').parentNode.hidden = !rights.marks;
-    $('barPen').classList.toggle('on', tool === 'pen');
-    $('barMark').classList.toggle('on', isMark);
-    $('barMark').firstChild.textContent = isMark ? ({ tri: '△', sq: '□', cir: '○', x: '✕', letter: 'A' })[tool] : '⑧';
+    $('barPen').hidden = !rights.marks;
+    $('barMark').hidden = !rights.marks;
     $('barClearDraw').disabled = !d.draw.length;
+    $('barClearMarks').disabled = !d.marks.length;
     Array.prototype.forEach.call($('penColors').children, function (b) {
       b.classList.toggle('on', b.getAttribute('data-color') === state.penColor);
     });
-    Array.prototype.forEach.call($('popMark').querySelectorAll('[data-tool]'), function (b) {
+    Array.prototype.forEach.call($('markChoices').querySelectorAll('[data-tool]'), function (b) {
       b.classList.toggle('on', b.getAttribute('data-tool') === tool);
     });
-    $('popPen').hidden = openPop !== 'popPen';
-    $('popMark').hidden = openPop !== 'popMark';
   }
 
   $('barTrial').addEventListener('click', function () {
@@ -1687,13 +1691,11 @@
       return M.demoTrial(x, !x.demo.trial);
     });
   });
+  // 畫筆：整排換成顏色
   $('barPen').addEventListener('click', function () {
-    // 按一下打開畫筆（同時跳出顏色）；已經在畫的話再按一下就收起畫筆
-    if (state.tool === 'pen' && openPop !== 'popPen') { state.tool = 'alt'; closePops(); render(); return; }
-    var was = openPop === 'popPen';
     closePops();
+    barMode = 'pen';
     state.tool = 'pen';
-    if (!was) openPop = 'popPen';
     render();
   });
   $('penColors').addEventListener('click', function (ev) {
@@ -1702,27 +1704,36 @@
     state.penColor = b.getAttribute('data-color');
     view.penColor = state.penColor;
     state.tool = 'pen';
-    closePops();
     render();
   });
-  $('barClearDraw').addEventListener('click', function () {
-    closePops();
-    $('btnClearDraw').click();
+  $('barClearDraw').addEventListener('click', function () { $('btnClearDraw').click(); });
+  // 退出畫筆：回到原本那排，並清空畫線
+  $('barPenExit').addEventListener('click', function () {
+    barMode = '';
+    state.tool = 'alt';
+    act(function (x) { return demoRights(x).marks && M.demoUndraw(x, true); }).then(function (ok) { if (!ok) render(); });
   });
+  // 標記：整排換成標記，預設三角形
   $('barMark').addEventListener('click', function () {
-    var tool = state.tool, isMark = STONE_TOOL[tool] === undefined && !DRAW_TOOL[tool];
-    if (isMark && openPop !== 'popMark') { state.tool = 'alt'; closePops(); render(); return; }
-    var was = openPop === 'popMark';
     closePops();
-    if (!was) openPop = 'popMark';
+    barMode = 'mark';
+    if (!MARK_TOOLS[state.tool]) state.tool = 'tri';
     render();
   });
-  $('popMark').addEventListener('click', function (ev) {
+  $('markChoices').addEventListener('click', function (ev) {
     var b = ev.target.closest('[data-tool]');
     if (!b) return;
     state.tool = b.getAttribute('data-tool');
-    closePops();
     render();
+  });
+  $('barClearMarks').addEventListener('click', function () {
+    act(function (x) { return demoRights(x).marks && M.demoUnmark(x); });
+  });
+  // 退出標記：回到原本那排，並清除標記
+  $('barMarkExit').addEventListener('click', function () {
+    barMode = '';
+    state.tool = 'alt';
+    act(function (x) { return demoRights(x).marks && M.demoUnmark(x); }).then(function (ok) { if (!ok) render(); });
   });
   function renderLecTools(g, rights, show) {
     var box = $('lecTools');
