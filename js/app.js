@@ -399,7 +399,7 @@
       if (prev.status !== 'demo') {
         closeGameDialogs();
         Sound.notice();
-        toast(prev.status === 'playing' ? '對局暫停，開始擺棋講解' : '開始擺棋講解');
+        toast(g.lecture ? '切換到講解房' : prev.status === 'playing' ? '對局暫停，開始擺棋講解' : '開始擺棋講解');
       } else {
         if (g.demo.base + g.demo.moves.length > prev.demo) Sound.stone();
         var quizKey = g.quiz ? g.quiz.n + ':' + g.quiz.state : '';
@@ -747,6 +747,8 @@
 
     // 老師擺棋講解
     $('btnTeach').hidden = !(teach && (playing || finished));
+    // 對局結束後：直接把這盤棋帶進講解房（學生畫面會一起切過去）
+    $('btnToLecture').hidden = !(teach && finished && !lecture);
     $('btnTeach').textContent = playing ? '暫停對局，擺棋講解' : '擺棋講解';
     var teachUi = demo && (rights.nav || rights.stones || rights.marks);
     $('teachBox').hidden = !teachUi;
@@ -1001,6 +1003,22 @@
     state.pending = -1;
     render();
   }
+
+  /* 對局結束後切換到講解房：帶入剛剛下完的整盤棋，停在最後一手 */
+  $('btnToLecture').addEventListener('click', function () {
+    var g = state.game;
+    if (!g || g.status !== 'finished' || !canTeach()) return;
+    var rec = G.cloneRecord(g.record);
+    rec.info.re = g.result ? g.result.sgf : '';
+    if (g.teacherColor && online()) {
+      // 棋譜裡寫上誰執黑白，講解房的名牌會顯示
+      var tName = nameOf(session.account, 'teacher'), sName = g.student ? nick(g.student) : '學生';
+      rec.info.pb = g.teacherColor === BLACK ? tName : sName;
+      rec.info.pw = g.teacherColor === WHITE ? tName : sName;
+    }
+    state.source = rec;   // 講解房結束後回到這份棋譜
+    startLecture(rec, rec.moves.length);
+  });
 
   /* 講解房中換棋盤或換棋譜：學生不用離開房間 */
   function lectureReplace(record, cursor) {
