@@ -147,6 +147,7 @@
   /* idx = -1 代表停一手。回傳 { ok, reason } */
   function play(game, idx, now) {
     if (game.status !== 'playing') return { ok: false, reason: 'notplaying' };
+    if (game.request) return { ok: false, reason: 'request' };   // 有申請在等回覆：時間暫停中，先不能下
     if (idx >= 0) {
       var reason = E.check(G.replay(game.record), game.turn, idx);
       if (reason) return { ok: false, reason: reason };
@@ -189,6 +190,7 @@
     if (!settle(game, now)) return false;
     var m = game.record.moves.pop();
     game.turn = m.c;
+    if (game.request) resumeClock(game, now);
     game.request = null;
     return true;
   }
@@ -370,9 +372,16 @@
 
   /* ---------- 申請（悔棋／數子／和棋）：一方提出，另一方同意才生效 ---------- */
 
-  function request(game, type, from) {
+  /* 申請等回覆的期間時鐘暫停；回覆或收回之後從 now 繼續走 */
+  function resumeClock(game, now) {
+    if (game.status === 'playing' && game.clock && !game.clock.since && typeof now === 'number') game.clock.since = now;
+  }
+
+  /* 提出悔棋／數目／和棋。有給 now 時會先把時鐘停下來（剛好超時則對局結束，回傳 true 讓結果存回去） */
+  function request(game, type, from, now) {
     if (game.status !== 'playing' || game.request) return false;
     if (type === 'undo' && !canUndo(game, from)) return false;
+    if (typeof now === 'number' && !stopClock(game, now)) return true;
     game.request = { type: type, from: from };
     return true;
   }
@@ -382,17 +391,18 @@
     game.request = null;
     if (!r || game.status !== 'playing') return false;
     game.reply = { type: r.type, from: r.from, ok: !!accept, n: (game.reply ? game.reply.n : 0) + 1 };
-    if (!accept) return false;
-    if (r.type === 'undo') return undo(game, r.from, now);
+    if (!accept) { resumeClock(game, now); return false; }
+    if (r.type === 'undo') { var ok = undo(game, r.from, now); resumeClock(game, now); return ok; }
     if (r.type === 'count') { enterScoring(game, now); return game.status === 'scoring'; }
     if (r.type === 'draw') { draw(game, now); return game.status === 'finished'; }
     return false;
   }
 
   /* 提出的一方自己收回申請 */
-  function cancelRequest(game, from) {
+  function cancelRequest(game, from, now) {
     if (!game.request || game.request.from !== from) return false;
     game.request = null;
+    resumeClock(game, now);
     return true;
   }
 

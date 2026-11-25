@@ -856,7 +856,7 @@
     }
     var waiting = !!r && !mustAnswer && controls(r.from);
     $('waitBox').hidden = !waiting;
-    if (waiting) $('waitText').textContent = '已提出' + REQUEST_LABEL[r.type] + '，等待對方回覆…';
+    if (waiting) $('waitText').textContent = '已提出' + REQUEST_LABEL[r.type] + '，等待對方回覆…（時間暫停）';
   }
 
   function updateClocks() {
@@ -1199,6 +1199,7 @@
   function doPlay(idx) {
     var g = state.game;
     if (g.status !== 'playing' || !controls(g.turn)) return;
+    if (g.request) { toast('有申請還在等回覆，時間暫停中，回覆後才能下'); return; }
     if (idx >= 0) {
       var reason = E.check(state.pos, g.turn, idx);
       if (reason) { explain(reason); return; }
@@ -1297,7 +1298,7 @@
     var g = state.game;
     if (g.status !== 'playing' || g.request) return;
     var from = online() ? myColor() : (type === 'undo' ? E.other(g.turn) : g.turn);
-    act(function (x) { return M.request(x, type, from); });
+    act(function (x) { return M.request(x, type, from, now()); });
   }
   $('btnUndo').addEventListener('click', function () { requestFlow('undo'); });
   $('btnCount').addEventListener('click', function () { requestFlow('count'); });
@@ -1316,7 +1317,7 @@
 
   $('btnCancelRequest').addEventListener('click', function () {
     var me = myColor();
-    act(function (x) { return M.cancelRequest(x, me); });
+    act(function (x) { return M.cancelRequest(x, me, now()); });
   });
 
   $('btnForceUndo').addEventListener('click', function () {

@@ -214,8 +214,10 @@
     startDemo: function (g, now) { return M0.startDemo(g, now + T0); },
     endDemo: function (g, now) { return M0.endDemo(g, now + T0); },
     canUndo: M0.canUndo, toggleDead: M0.toggleDead, score: M0.score,
-    finishByScore: M0.finishByScore, request: M0.request,
-    agree: M0.agree, cancelRequest: M0.cancelRequest, normalize: M0.normalize
+    finishByScore: M0.finishByScore,
+    request: function (g, t, f, now) { return M0.request(g, t, f, now === undefined ? undefined : now + T0); },
+    cancelRequest: function (g, f, now) { return M0.cancelRequest(g, f, now === undefined ? undefined : now + T0); },
+    agree: M0.agree, normalize: M0.normalize
   };
   /* 模擬即時資料庫：存進去再讀出來時，null、空陣列、空物件都會消失 */
   function throughDatabase(v) {
@@ -842,6 +844,23 @@
     var s1 = M0.createLecture(G.newRecord({ size: 9 }), 0);
     M0.quizOpen(s1);
     eq(M0.quizSubmit(s1, 'a', [1]), false, '一手答題不能提交變化');
+  });
+
+  test('申請期間時間暫停：提出後不扣時間、不能落子；拒絕、同意悔棋、收回後從回覆時繼續走', function () {
+    var g = M.create(G.newRecord({ size: 9 }), 0, B, { main: 60, byo: 0, periods: 0 }, 0);
+    M.play(g, 10, 5000);                           // 黑用 5 秒；輪到白
+    eq(M.request(g, 'undo', B, 8000), true);       // 白已用 3 秒時，黑申請悔棋
+    eq(M.timeView(g, W, 30000).remaining, 57000, '等回覆的期間白的時間不會少');
+    eq(M.play(g, 20, 30000).reason, 'request', '等回覆時不能落子');
+    M.respond(g, false, 30000);                    // 白拒絕：從 30 秒時繼續走
+    eq(M.timeView(g, W, 31000).remaining, 56000, '拒絕後繼續扣');
+    M.play(g, 20, 31000);                          // 白下；輪到黑（黑剩 55 秒）
+    M.request(g, 'draw', W, 33000);                // 黑已用 2 秒時，白提和棋
+    M.cancelRequest(g, W, 50000);                  // 白收回
+    eq(M.timeView(g, B, 50000).remaining, 53000, '收回前的 17 秒不算');
+    M.request(g, 'undo', W, 50000);
+    M.respond(g, true, 60000);                     // 同意悔棋：輪回白，從 60 秒繼續
+    eq(g.turn, W); eq(g.clock.since, 60000 + T0, '同意後時鐘從回覆時開始');
   });
 
   var pass = results.filter(function (r) { return r.ok; }).length;
