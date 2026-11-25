@@ -81,8 +81,9 @@
     var c = game.clock;
     if (!c) return null;
     var left = c.left[key(color)];
-    var running = game.status === 'playing' && game.turn === color && c.since > 0;
-    var elapsed = running ? Math.max(0, now - c.since) : 0;
+    // c.paused：申請中暫停時，這一手已經用掉的毫秒（時鐘停住，畫面停在暫停當下）
+    var running = game.status === 'playing' && game.turn === color && (c.since > 0 || c.paused > 0);
+    var elapsed = !running ? 0 : c.since > 0 ? Math.max(0, now - c.since) : c.paused;
 
     if (elapsed < left.main) {
       return { inByo: false, remaining: left.main - elapsed, periods: left.periods, out: false };
@@ -110,6 +111,7 @@
   /* 把輪到的一方用掉的時間結算進去。超時會直接判負並回傳 false。 */
   function settle(game, now) {
     var c = game.clock;
+    if (c && !c.since && c.paused > 0) { c.since = now - c.paused; c.paused = 0; }   // 暫停中：從暫停時用掉的時間接著算
     if (!c || !c.since) return true;
     var v = timeView(game, game.turn, now);
     var left = c.left[key(game.turn)];
@@ -372,16 +374,30 @@
 
   /* ---------- 申請（悔棋／數子／和棋）：一方提出，另一方同意才生效 ---------- */
 
-  /* 申請等回覆的期間時鐘暫停；回覆或收回之後從 now 繼續走 */
+  /*
+   * 申請等回覆的期間時鐘暫停：記下這一手已經用掉多少（包含讀秒倒數到一半），不結算。
+   * 結束後 resumeClock 從原本的時間接著跑；等待的時間不算。
+   */
+  function pauseClock(game, now) {
+    var c = game.clock;
+    if (!c || !c.since) return true;
+    if (timeView(game, game.turn, now).out) { settle(game, now); return false; }   // 剛好超時：對局結束
+    c.paused = Math.max(1, now - c.since);
+    c.since = 0;
+    return true;
+  }
   function resumeClock(game, now) {
-    if (game.status === 'playing' && game.clock && !game.clock.since && typeof now === 'number') game.clock.since = now;
+    var c = game.clock;
+    if (game.status !== 'playing' || !c || c.since || typeof now !== 'number') return;
+    c.since = now - (c.paused || 0);
+    c.paused = 0;
   }
 
   /* 提出悔棋／數目／和棋。有給 now 時會先把時鐘停下來（剛好超時則對局結束，回傳 true 讓結果存回去） */
   function request(game, type, from, now) {
     if (game.status !== 'playing' || game.request) return false;
     if (type === 'undo' && !canUndo(game, from)) return false;
-    if (typeof now === 'number' && !stopClock(game, now)) return true;
+    if (typeof now === 'number' && !pauseClock(game, now)) return true;
     game.request = { type: type, from: from };
     return true;
   }
@@ -392,6 +408,7 @@
     if (!r || game.status !== 'playing') return false;
     game.reply = { type: r.type, from: r.from, ok: !!accept, n: (game.reply ? game.reply.n : 0) + 1 };
     if (!accept) { resumeClock(game, now); return false; }
+    // 同意悔棋：輪回提出的一方，他的時間從現在開始（讀秒中就是重新倒數一整次）
     if (r.type === 'undo') { var ok = undo(game, r.from, now); resumeClock(game, now); return ok; }
     if (r.type === 'count') { enterScoring(game, now); return game.status === 'scoring'; }
     if (r.type === 'draw') { draw(game, now); return game.status === 'finished'; }

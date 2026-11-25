@@ -863,6 +863,21 @@
     eq(g.turn, W); eq(g.clock.since, 60000 + T0, '同意後時鐘從回覆時開始');
   });
 
+  test('讀秒中申請：暫停時倒數停在原處，拒絕後接著倒數；同意悔棋則提出的一方重新倒數一整次', function () {
+    var g = M.create(G.newRecord({ size: 9 }), 0, B, { main: 0, byo: 30, periods: 3 }, 0);
+    M.play(g, 10, 5000);                           // 黑下；輪到白，白在讀秒
+    M.request(g, 'undo', B, 25000);                // 白讀秒用了 20 秒時，黑申請悔棋
+    eq(M.timeView(g, W, 60000).remaining, 10000, '等回覆時停在剩 10 秒');
+    M.respond(g, false, 60000);                    // 白拒絕
+    eq(M.timeView(g, W, 65000).remaining, 5000, '拒絕後從剩 10 秒接著倒數');
+    eq(M.timeView(g, W, 65000).periods, 3, '沒有多扣讀秒次數');
+    M.request(g, 'undo', B, 65000);
+    M.respond(g, true, 70000);                     // 白同意悔棋，輪回黑
+    eq(g.turn, B);
+    eq(M.timeView(g, B, 71000).remaining, 29000, '黑重新倒數一整次讀秒');
+    eq(M.timeView(g, W, 71000).periods, 3, '白的讀秒次數不變');
+  });
+
   var pass = results.filter(function (r) { return r.ok; }).length;
   document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
   document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';
