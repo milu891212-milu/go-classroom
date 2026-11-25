@@ -2,11 +2,12 @@
  * 音效：落子與提示音用瀏覽器即時合成；讀秒語音用 audio 資料夾裡的音檔。
  * 瀏覽器規定要先有點擊才能出聲，所以第一次點畫面時才建立，並順便把語音檔載進來。
  *
- * 語音檔（想換成自己錄的聲音，用同樣的檔名蓋掉即可，WAV 格式）：
- *   1.wav ～ 10.wav  倒數「一」到「十」
- *   byo.wav          開始讀秒
- *   two.wav          剩下兩次讀秒
- *   last.wav         最後一次讀秒
+ * 語音檔（微軟自然語音「曉曉」產生；想換成自己錄的聲音，用同樣的檔名蓋掉即可，MP3 格式）：
+ *   1.mp3 ～ 10.mp3  倒數「一」到「十」
+ *   byo.mp3          開始讀秒
+ *   two.mp3          還剩兩次
+ *   last.mp3         最後一次
+ * 載入時會自動剪掉前後的空白，倒數才不會拖拍。
  */
 (function (global) {
   'use strict';
@@ -36,17 +37,34 @@
     }
   }
 
+  /* 剪掉語音前後的靜音（產生的音檔後面會補一段空白） */
+  function trimSilence(a, buf) {
+    try {
+      var d = buf.getChannelData(0), th = 0.01, s = 0, e = d.length - 1;
+      while (s < d.length && Math.abs(d[s]) < th) s++;
+      while (e > s && Math.abs(d[e]) < th) e--;
+      if (e <= s) return buf;
+      s = Math.max(0, s - Math.round(buf.sampleRate * 0.01));
+      e = Math.min(d.length - 1, e + Math.round(buf.sampleRate * 0.04));
+      var out = a.createBuffer(buf.numberOfChannels, e - s + 1, buf.sampleRate);
+      for (var ch = 0; ch < buf.numberOfChannels; ch++) out.getChannelData(ch).set(buf.getChannelData(ch).subarray(s, e + 1));
+      return out;
+    } catch (err) {
+      return buf;
+    }
+  }
+
   function loadVoice(a) {
     if (voiceLoading || !global.fetch) return;
     voiceLoading = true;
     VOICE.forEach(function (name) {
-      global.fetch('audio/' + name + '.wav?v=2').then(function (res) {
+      global.fetch('audio/' + name + '.mp3?v=3').then(function (res) {
         if (!res.ok) throw new Error('missing');
         return res.arrayBuffer();
       }).then(function (buf) {
         return new Promise(function (resolve, reject) { a.decodeAudioData(buf, resolve, reject); });
       }).then(function (decoded) {
-        clips[name] = decoded;
+        clips[name] = trimSilence(a, decoded);
         // 剛開局就要講的那一句（例如沒有基本時間、一開始就讀秒），載好後馬上補播
         if (waiting && waiting.name === name && Date.now() < waiting.until) {
           waiting = null;
