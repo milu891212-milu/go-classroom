@@ -878,6 +878,19 @@
     eq(M.timeView(g, W, 71000).periods, 3, '白的讀秒次數不變');
   });
 
+  test('擺題目：點已有的棋子就拿掉（不論黑白），上一手可以復原；經過資料庫一致', function () {
+    var g = M0.createLecture(G.newRecord({ size: 9 }), 0);
+    M0.demoPlay(g, B, 10, true); M0.demoPlay(g, W, 11, true);
+    eq(M0.demoPlay(g, B, 11, true), true, '用黑子點白子');
+    eq(M0.demoView(g).board[11], 0, '白子被拿掉');
+    eq(M0.demoView(g).board[10], B, '其他棋子不動');
+    eq(M0.normalize(throughDatabase(g)).demo.moves[2], { c: W, p: 11, s: 1, e: 1 });
+    eq(M0.demoNextColor(g), B, '拿掉棋子不影響輪到誰');
+    M0.demoBack(g);
+    eq(M0.demoView(g).board[11], W, '上一手把拿掉的棋子放回來');
+    eq(M0.demoPlay(g, 0, 11), false, '一般擺棋點有棋子的地方還是不能下');
+  });
+
   var pass = results.filter(function (r) { return r.ok; }).length;
   document.getElementById('summary').textContent = '通過 ' + pass + ' / ' + results.length;
   document.getElementById('summary').className = pass === results.length ? 'ok' : 'bad';

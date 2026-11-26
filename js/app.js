@@ -1996,7 +1996,15 @@
     else text = G.countMoves(g.record, dv.base) + '手/' + total;
     $('barCount').textContent = text;
     $('barCount').classList.toggle('trial', !!d.trial);
-    $('barTrial').hidden = !rights.stones && !rights.nav;
+    // 學生持黑／持白（輪流擺）時只能下自己的顏色，不給試下
+    $('barTrial').hidden = (!rights.stones && !rights.nav) || (rights.turns && !rights.admin);
+    // 學生端：手數、音效開關放在棋盤下方，比較好找
+    var student = online() && !isTeacher();
+    $('barNums').hidden = !student;
+    $('barSound').hidden = !student;
+    $('barNums').classList.toggle('on', prefs.demoNumbers);
+    $('barSound').classList.toggle('on', prefs.sound);
+    $('barSound').classList.toggle('muted', !prefs.sound);
     $('barTrial').classList.toggle('on', !!d.trial);
     $('barTrial').title = d.trial ? '結束試下，回到原來的盤面' : '試下：擺完按這裡結束，就回到原來的盤面';
     $('barPen').hidden = !rights.marks;
@@ -2724,6 +2732,18 @@
     Sound.enabled = this.checked;
     savePrefs();
     if (this.checked) Sound.stone();
+    render();
+  });
+  // 棋盤下方的手數、音效按鈕（學生端）：跟左邊的勾選框是同一個設定
+  $('barNums').addEventListener('click', function () {
+    var box = $('optNumbers');
+    box.checked = !prefs.demoNumbers;
+    box.dispatchEvent(new Event('change'));
+  });
+  $('barSound').addEventListener('click', function () {
+    var box = $('optSound');
+    box.checked = !prefs.sound;
+    box.dispatchEvent(new Event('change'));
   });
 
   /* ---------- 其他 ---------- */

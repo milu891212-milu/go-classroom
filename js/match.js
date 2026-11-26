@@ -623,6 +623,13 @@
     var pos = G.replay(game.record, base), numbers = new Uint16Array(pos.size * pos.size), last = pos.last;
     var moves = game.demo ? game.demo.moves : [], n = 0;
     for (var i = 0; i < moves.length; i++) {
+      if (moves[i].e) {
+        // 擺題目時點已有的棋子：把那一顆拿掉
+        pos.board[moves[i].p] = 0;
+        numbers[moves[i].p] = 0;
+        if (last === moves[i].p) last = -1;
+        continue;
+      }
       var r = E.place(pos, moves[i].c, moves[i].p, false);
       if (!r.ok) continue;
       for (var k = 0; k < r.captured.length; k++) numbers[r.captured[k]] = 0;
@@ -651,6 +658,12 @@
     var c = color === BLACK || color === WHITE ? color : demoNextColor(game);
     var pos = demoView(game).pos;
     pos.ko = -1;
+    if (setup && idx >= 0 && idx < pos.board.length && pos.board[idx]) {
+      // 只落黑子／白子（擺題目）：點已經有棋子的地方就把它拿掉
+      game.demo.moves.push({ c: pos.board[idx], p: idx, s: 1, e: 1 });
+      game.demo.undone = [];
+      return true;
+    }
     if (E.check(pos, c, idx)) return false;
     game.demo.moves.push(setup ? { c: c, p: idx, s: 1 } : { c: c, p: idx });
     game.demo.undone = [];
@@ -850,7 +863,10 @@
     if (g.lecture) g.status = 'demo';
     if (g.status === 'demo') {
       var d = g.demo || {};
-      var stone = function (m) { return m.s ? { c: m.c, p: m.p, s: 1 } : { c: m.c, p: m.p }; };
+      var stone = function (m) {
+        if (m.e) return { c: m.c, p: m.p, s: 1, e: 1 };
+        return m.s ? { c: m.c, p: m.p, s: 1 } : { c: m.c, p: m.p };
+      };
       g.demo = {
         from: g.lecture ? 'lecture' : d.from === 'finished' ? 'finished' : 'playing',
         base: typeof d.base === 'number' ? Math.max(0, Math.min(r.moves.length, d.base)) : r.moves.length,
