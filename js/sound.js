@@ -79,6 +79,24 @@
   global.addEventListener('pointerdown', unlock, true);
   global.addEventListener('keydown', unlock, true);
 
+  /* 落子聲用的白雜訊（建立一次重複使用） */
+  var noiseBuf = null, curve = null;
+  function noiseBuffer(a) {
+    if (noiseBuf && noiseBuf.sampleRate === a.sampleRate) return noiseBuf;
+    var len = Math.round(a.sampleRate * 0.1);
+    noiseBuf = a.createBuffer(1, len, a.sampleRate);
+    var d = noiseBuf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    return noiseBuf;
+  }
+  function softCurve() {
+    if (curve) return curve;
+    var n = 2048;
+    curve = new Float32Array(n);
+    for (var i = 0; i < n; i++) { var x = (i / (n - 1)) * 4 - 2; curve[i] = Math.tanh(x * 1.1) / Math.tanh(2.2); }
+    return curve;
+  }
+
   function tone(freq, start, dur, volume, type) {
     var a = audio();
     if (!a) return;
@@ -98,22 +116,39 @@
   Go.Sound = {
     enabled: true,
 
-    /* 落子：短促的「叩」一聲 */
+    /* 落子：響亮、短促的「搭」一聲（濾過的敲擊雜訊＋很快衰減的木頭共鳴，每一手音高稍有不同） */
     stone: function () {
       var a = audio();
       if (!a) return;
-      var t = a.currentTime;
-      var osc = a.createOscillator(), gain = a.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(950, t);
-      osc.frequency.exponentialRampToValueAtTime(180, t + 0.07);
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.5, t + 0.004);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-      osc.connect(gain);
-      gain.connect(a.destination);
-      osc.start(t);
-      osc.stop(t + 0.14);
+      var t = a.currentTime + 0.005, jitter = 1 + (Math.random() - 0.5) * 0.08;
+      var out = a.createGain(), comp = a.createDynamicsCompressor(), mk = a.createGain(), lim = a.createWaveShaper();
+      out.gain.value = 1.17;
+      comp.threshold.value = -12; comp.ratio.value = 4; comp.attack.value = 0.0005; comp.release.value = 0.06;
+      mk.gain.value = 2.8;
+      lim.curve = softCurve();   // 柔性限幅：響亮但不破音
+      out.connect(comp); comp.connect(mk); mk.connect(lim); lim.connect(a.destination);
+      // 敲擊
+      var src = a.createBufferSource(), hp = a.createBiquadFilter(), bp = a.createBiquadFilter(), g = a.createGain();
+      src.buffer = noiseBuffer(a);
+      hp.type = 'highpass'; hp.frequency.value = 1100;
+      bp.type = 'bandpass'; bp.frequency.value = 2600 * jitter; bp.Q.value = 1.6;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(2.2, t + 0.0015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.014);
+      src.connect(hp); hp.connect(bp); bp.connect(g); g.connect(out);
+      src.start(t); src.stop(t + 0.035);
+      // 木頭共鳴
+      [[2100, 0.20, 0.018], [900, 0.22, 0.02], [320, 0.20, 0.022]].forEach(function (b) {
+        var o = a.createOscillator(), og = a.createGain();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(b[0] * jitter, t);
+        o.frequency.exponentialRampToValueAtTime(b[0] * jitter * 0.92, t + b[2]);
+        og.gain.setValueAtTime(0.0001, t);
+        og.gain.exponentialRampToValueAtTime(b[1], t + 0.002);
+        og.gain.exponentialRampToValueAtTime(0.0001, t + b[2]);
+        o.connect(og); og.connect(out);
+        o.start(t); o.stop(t + b[2] + 0.02);
+      });
     },
 
     /* 讀秒倒數：每秒一聲，最後三秒音調較高（語音檔載不到時的替代） */
